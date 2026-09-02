@@ -1,0 +1,164 @@
+.progress-section {
+  background-color: white;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 64px;
+  z-index: 900;
+}
+
+.progress-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.step-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.step-badge {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.step-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.percentage {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.progress-bar-wrapper {
+  margin-bottom: 12px;
+}
+
+.progress-bar-background {
+  width: 100%;
+  height: 8px;
+  background-color: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007bff 0%, #0084d4 50%, #00b4a6 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.step-indicators {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #d1d5db;
+  transition: all 0.3s ease;
+}
+
+.step-dot.completed {
+  background: linear-gradient(135deg, #007bff 0%, #0084d4 50%, #00b4a6 100%);
+}
+
+.step-dot.current {
+  background: linear-gradient(135deg, #007bff 0%, #0084d4 50%, #00b4a6 100%);
+  width: 12px;
+  height: 12px;
+}
+
+.step-dot.pending {
+  background-color: #e5e7eb;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .progress-section {
+    padding: 16px 16px;
+    top: 60px;
+  }
+
+  .progress-header {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .step-info {
+    width: 100%;
+  }
+
+  .step-title {
+    font-size: 16px;
+  }
+
+  .percentage {
+    align-self: flex-end;
+    width: 100%;
+    text-align: right;
+  }
+
+  .step-badge {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .progress-section {
+    padding: 12px 12px;
+    top: 56px;
+  }
+
+  .step-title {
+    font-size: 14px;
+  }
+
+  .step-badge {
+    padding: 3px 10px;
+    font-size: 10px;
+  }
+
+  .percentage {
+    font-size: 12px;
+  }
+
+  .progress-bar-background {
+    height: 6px;
+  }
+
+  .step-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .step-dot.current {
+    width: 10px;
+    height: 10px;
+  }
+}
