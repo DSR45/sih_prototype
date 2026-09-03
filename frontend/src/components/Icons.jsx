@@ -1,5 +1,3 @@
-import React from 'react'
-
 // Professional SVG Icons
 export const Icons = {
   Heart: () => (

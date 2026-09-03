@@ -1,4 +1,3 @@
-import React from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import './LanguageSelection.css'

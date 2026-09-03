@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { genderOptions } from '../data/mockData'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'

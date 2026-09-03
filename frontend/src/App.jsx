@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { LanguageProvider } from './context/LanguageContext'
 import Header from './components/Header'
 import ProgressBar from './components/ProgressBar'
