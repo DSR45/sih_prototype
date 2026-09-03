@@ -22,12 +22,13 @@ Stores permanent patient information.
 
 | Column               | Type         | Description        |
 | -------------------- | ------------ | ------------------ |
-| `patient_id`         | UUID (PK)    | Unique patient ID  |
+| `patient_id`         | TEXT (PK)    | Unique patient ID  |
 | `full_name`          | VARCHAR(100) | Patient name       |
 | `age`                | INT          | Age                |
-| `gender`             | VARCHAR(20)  | Male/Female/Other  |
+| `gender`             | TEXT         | Male/Female/Other  |
 | `phone`              | VARCHAR(15)  | Contact number     |
 | `preferred_language` | VARCHAR(30)  | Preferred language |
+| `created_at`         | TIMESTAMP    | Login Time         |
 
 
 ---
@@ -36,16 +37,16 @@ Stores permanent patient information.
 
 Each hospital visit is stored as a separate session.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `session_id` | UUID (PK) | Visit ID |
-| `patient_id` | UUID (FK) | References `patients` |
-| `visit_date` | TIMESTAMP | Visit time |
-| `department` | VARCHAR(50) | OPD/AYUSH |
+| Column          | Type        | Description           |
+| --------------- | ----------- | --------------------- |
+| `session_id`    | UUID (PK)   | Visit ID              |
+| `patient_id`    | TEXT (FK)   | References `patients` |
+| `visit_date`    | TIMESTAMP   | Visit time            |
+| `department`    | VARCHAR(50) | OPD/AYUSH             |
 | `language_used` | VARCHAR(30) | Conversation language |
-| `consent_given` | BOOLEAN | Patient consent |
-| `red_flag` | BOOLEAN | Emergency indicator |
-| `status` | VARCHAR(20) | Visit status |
+| `consent_given` | BOOLEAN     | Patient consent       |
+| `red_flag`      | BOOLEAN     | Emergency indicator   |
+| `status`        | VARCHAR(20) | Visit status          |
 
 ---
 
@@ -117,15 +118,15 @@ Stores uploaded medical documents and OCR results.
 
 Stores medicines extracted from OCR.
 
-| Column | Type |
-|--------|------|
-| `medicine_id` | UUID (PK) |
-| `document_id` | UUID (FK) |
+| Column          | Type         |
+| --------------- | ------------ |
+| `medicine_id`   | UUID (PK)    |
+| `document_id`   | UUID (FK)    |
 | `medicine_name` | VARCHAR(100) |
-| `dosage` | VARCHAR(50) |
-| `frequency` | VARCHAR(50) |
-| `duration` | VARCHAR(50) |
-| `confidence` | DECIMAL(5,2) |
+| `dosage`        | VARCHAR(50)  |
+| `frequency`     | VARCHAR(50)  |
+| `duration`      | VARCHAR(50)  |
+| `confidence`    | DECIMAL(5,2) |
 
 ---
 
