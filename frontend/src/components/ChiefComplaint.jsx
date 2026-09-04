@@ -115,7 +115,7 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
             <span className="page-dot"></span>
             <span className="page-dot active"></span>
           </div>
-          <button className="continue-button">{t.complaint.continue} →</button>
+          <button className="continue-button" onClick={() => onNavigate(5)}>{t.complaint.continue} →</button>
         </div>
       </div>
     </div>

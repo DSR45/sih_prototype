@@ -6,6 +6,7 @@ import Welcome from './pages/Welcome'
 import LanguageSelection from './pages/LanguageSelection'
 import PatientInformation from './pages/PatientInformation'
 import ChiefComplaint from './components/ChiefComplaint'
+import SymptomAssessment from './pages/SymptomAssessment'
 import './App.css'
 
 function App() {
@@ -17,7 +18,8 @@ function App() {
     age: '',
     gender: '',
     mobile: '',
-    chiefComplaint: ''
+    chiefComplaint: '',
+    assessmentAnswers: null
   })
 
   const handleNavigate = (screenNumber) => {
@@ -66,6 +68,14 @@ function App() {
       case 4:
         return (
           <ChiefComplaint
+            patientData={patientData}
+            onNavigate={handleNavigate}
+            onUpdateData={handleUpdateData}
+          />
+        )
+      case 5:
+        return (
+          <SymptomAssessment
             patientData={patientData}
             onNavigate={handleNavigate}
             onUpdateData={handleUpdateData}
