@@ -16,7 +16,7 @@ function ProgressBar({ currentScreen }) {
   const t = translations[language]
   const config = screenConfig[currentScreen]
 
-  if (config?.hide) {
+  if (!config || config.hide) {
     return null // Don't show progress bar on welcome screen
   }
 
