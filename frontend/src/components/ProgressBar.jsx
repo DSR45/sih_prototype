@@ -4,9 +4,11 @@ import './ProgressBar.css'
 
 const screenConfig = {
   1: { title: 'Welcome', percentage: 0, hide: true },
-  2: { title: 'Language Selection', percentage: 25, step: 1, totalSteps: 4 },
-  3: { title: 'Patient Information', percentage: 50, step: 2, totalSteps: 4 },
-  4: { title: 'Chief Complaint', percentage: 75, step: 3, totalSteps: 4 }
+  2: { title: 'Language Selection', percentage: 20, step: 1, totalSteps: 5 },
+  3: { title: 'Patient Information', percentage: 40, step: 2, totalSteps: 5 },
+  4: { title: 'Chief Complaint', percentage: 60, step: 3, totalSteps: 5 },
+  5: { title: 'Symptom Assessment', percentage: 80, step: 4, totalSteps: 5 },
+  6: { title: 'Complete', hide: true }
 }
 
 function ProgressBar({ currentScreen }) {
@@ -22,7 +24,8 @@ function ProgressBar({ currentScreen }) {
   const titles = {
     2: t.progress.languageSelection,
     3: t.progress.patientInfo,
-    4: t.progress.chiefComplaint
+    4: t.progress.chiefComplaint,
+    5: t.progress.symptomAssessment
   }
 
   return (

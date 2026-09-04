@@ -91,7 +91,26 @@ export const translations = {
       complete: "% complete",
       languageSelection: "Language Selection",
       patientInfo: "Patient Information",
-      chiefComplaint: "Chief Complaint"
+      chiefComplaint: "Chief Complaint",
+      symptomAssessment: "Symptom Assessment"
+    },
+
+    assessment: {
+      badge: "Guided assessment",
+      title: "Let's understand your symptoms better",
+      subtitle: "I'll ask you a few simple questions to better understand what you're experiencing.",
+      progress: "Question",
+      of: "of",
+      continue: "Continue",
+      finish: "Finish assessment",
+      back: "Back",
+      q1: { question: "When did your symptoms start?", opt1: "Today", opt2: "1-3 days ago", opt3: "4-7 days ago", opt4: "More than a week ago" },
+      q2: { question: "How severe is the problem right now?", opt1: "Mild", opt2: "Moderate", opt3: "Severe", opt4: "Very severe" },
+      q3: { question: "Has the condition been getting better or worse?", opt1: "Getting better", opt2: "Staying the same", opt3: "Getting worse", opt4: "Comes and goes" },
+      q4: { question: "Are you experiencing any of these symptoms?", description: "Select all that apply.", opt1: "Fever", opt2: "Pain", opt3: "Difficulty breathing", opt4: "Dizziness", opt5: "Nausea", opt6: "Vomiting", opt7: "Weakness", opt8: "None of these" },
+      q5: { question: "Are you having difficulty breathing right now?", opt1: "Yes", opt2: "No", opt3: "Sometimes" },
+      q6: { question: "Where is the pain located?", description: "Select all that apply.", opt1: "Head", opt2: "Chest", opt3: "Abdomen", opt4: "Back", opt5: "Arms or legs", opt6: "Somewhere else" },
+      complete: { title: "Assessment complete", text: "Thank you. We have enough information to continue.", button: "Continue" }
     }
   },
 
@@ -187,7 +206,26 @@ export const translations = {
       complete: "% पूर्ण",
       languageSelection: "भाषा चयन",
       patientInfo: "रोगी जानकारी",
-      chiefComplaint: "मुख्य समस्या"
+      chiefComplaint: "मुख्य समस्या",
+      symptomAssessment: "लक्षण मूल्यांकन"
+    },
+
+    assessment: {
+      badge: "निर्देशित मूल्यांकन",
+      title: "आइए आपके लक्षणों को बेहतर समझते हैं",
+      subtitle: "आप जो अनुभव कर रहे हैं उसे बेहतर समझने के लिए मैं आपसे कुछ सरल प्रश्न पूछूंगा।",
+      progress: "प्रश्न",
+      of: "में से",
+      continue: "जारी रखें",
+      finish: "मूल्यांकन पूरा करें",
+      back: "वापस",
+      q1: { question: "आपके लक्षण कब शुरू हुए?", opt1: "आज", opt2: "1-3 दिन पहले", opt3: "4-7 दिन पहले", opt4: "एक सप्ताह से अधिक पहले" },
+      q2: { question: "अभी समस्या कितनी गंभीर है?", opt1: "हल्की", opt2: "मध्यम", opt3: "गंभीर", opt4: "बहुत गंभीर" },
+      q3: { question: "स्थिति बेहतर हो रही है या बिगड़ रही है?", opt1: "बेहतर हो रही है", opt2: "वैसी ही है", opt3: "बिगड़ रही है", opt4: "कभी-कभी होती है" },
+      q4: { question: "क्या आपको इनमें से कोई लक्षण हो रहा है?", description: "जो लागू हों उन्हें चुनें।", opt1: "बुखार", opt2: "दर्द", opt3: "सांस लेने में कठिनाई", opt4: "चक्कर आना", opt5: "जी मिचलाना", opt6: "उल्टी", opt7: "कमजोरी", opt8: "इनमें से कोई नहीं" },
+      q5: { question: "क्या आपको अभी सांस लेने में कठिनाई हो रही है?", opt1: "हां", opt2: "नहीं", opt3: "कभी-कभी" },
+      q6: { question: "दर्द कहाँ है?", description: "जो लागू हों उन्हें चुनें।", opt1: "सिर", opt2: "छाती", opt3: "पेट", opt4: "पीठ", opt5: "हाथ या पैर", opt6: "कहीं और" },
+      complete: { title: "मूल्यांकन पूरा हुआ", text: "धन्यवाद। आगे बढ़ने के लिए हमारे पास पर्याप्त जानकारी है।", button: "जारी रखें" }
     }
   }
 }
