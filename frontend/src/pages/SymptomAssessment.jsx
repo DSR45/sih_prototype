@@ -1,269 +1,245 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
+import { isPilesComplaint } from './PatientWorkflow'
 import './SymptomAssessment.css'
 
 function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
   const { language } = useLanguage()
-  const t = translations[language]
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.assessment) {
+    console.error('Translations not loaded properly for language:', language)
+    return null
+  }
+  
+  const pilesCase = isPilesComplaint(patientData.chiefComplaint)
+  
+  const feverQuestions = [
+    { 
+      id: 'duration', 
+      question: t.assessment.fever.q1.question, 
+      options: [
+        [t.assessment.fever.q1.opt1, '1-day'], 
+        [t.assessment.fever.q1.opt2, '2-3-days'], 
+        [t.assessment.fever.q1.opt3, 'more-than-3-days']
+      ] 
+    },
+    { 
+      id: 'temperature', 
+      question: t.assessment.fever.q2.question, 
+      options: [
+        [t.assessment.fever.q2.opt1, 'below-100'], 
+        [t.assessment.fever.q2.opt2, 'around-101'], 
+        [t.assessment.fever.q2.opt3, '102-or-higher']
+      ] 
+    },
+    { 
+      id: 'symptoms', 
+      question: t.assessment.fever.q3.question, 
+      description: t.assessment.fever.q3.description, 
+      multi: true, 
+      options: [
+        [t.assessment.fever.q3.opt1, 'headache'], 
+        [t.assessment.fever.q3.opt2, 'body-ache'], 
+        [t.assessment.fever.q3.opt3, 'cough'], 
+        [t.assessment.fever.q3.opt4, 'sore-throat'], 
+        [t.assessment.fever.q3.opt5, 'vomiting'], 
+        [t.assessment.fever.q3.opt6, 'none']
+      ] 
+    },
+    { 
+      id: 'seriousSymptoms', 
+      question: t.assessment.fever.q4.question, 
+      description: t.assessment.fever.q4.description, 
+      multi: true, 
+      options: [
+        [t.assessment.fever.q4.opt1, 'breathing'], 
+        [t.assessment.fever.q4.opt2, 'chest-pain'], 
+        [t.assessment.fever.q4.opt3, 'confusion'], 
+        [t.assessment.fever.q4.opt4, 'severe-weakness'], 
+        [t.assessment.fever.q4.opt5, 'none']
+      ] 
+    }
+  ]
+
+  const pilesQuestions = [
+    { 
+      id: 'duration', 
+      question: t.assessment.piles.q1.question, 
+      options: [
+        [t.assessment.piles.q1.opt1, 'less-than-week'], 
+        [t.assessment.piles.q1.opt2, '1-4-weeks'], 
+        [t.assessment.piles.q1.opt3, 'more-than-month']
+      ] 
+    },
+    { 
+      id: 'bloodColour', 
+      question: t.assessment.piles.q2.question, 
+      options: [
+        [t.assessment.piles.q2.opt1, 'bright-red'], 
+        [t.assessment.piles.q2.opt2, 'dark'], 
+        [t.assessment.piles.q2.opt3, 'not-sure']
+      ] 
+    },
+    { 
+      id: 'pain', 
+      question: t.assessment.piles.q3.question, 
+      options: [
+        [t.assessment.piles.q3.opt1, 'yes'], 
+        [t.assessment.piles.q3.opt2, 'no'], 
+        [t.assessment.piles.q3.opt3, 'sometimes']
+      ] 
+    },
+    { 
+      id: 'lump', 
+      question: t.assessment.piles.q4.question, 
+      options: [
+        [t.assessment.piles.q4.opt1, 'yes'], 
+        [t.assessment.piles.q4.opt2, 'no'], 
+        [t.assessment.piles.q4.opt3, 'not-sure']
+      ] 
+    },
+    { 
+      id: 'constipation', 
+      question: t.assessment.piles.q5.question, 
+      options: [
+        [t.assessment.piles.q5.opt1, 'often'], 
+        [t.assessment.piles.q5.opt2, 'sometimes'], 
+        [t.assessment.piles.q5.opt3, 'no']
+      ] 
+    },
+    { 
+      id: 'frequency', 
+      question: t.assessment.piles.q6.question, 
+      options: [
+        [t.assessment.piles.q6.opt1, 'once'], 
+        [t.assessment.piles.q6.opt2, 'few-times'], 
+        [t.assessment.piles.q6.opt3, 'frequently']
+      ] 
+    }
+  ]
+
+  const questions = pilesCase ? pilesQuestions : feverQuestions
+  const [questionIndex, setQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState(patientData.assessmentAnswers || {})
-  const [selectedOptions, setSelectedOptions] = useState([])
+  const currentQuestion = questions[questionIndex]
+  const selected = currentQuestion?.multi ? (answers[currentQuestion.id] || []) : (answers[currentQuestion?.id] ? [answers[currentQuestion.id]] : [])
+  const complete = questionIndex >= questions.length
 
-  // Question configuration with conditional logic
-  const getQuestions = (currentAnswers = answers) => {
-    const baseQuestions = [
-      {
-        id: 'symptom_start',
-        question: t.assessment.q1.question,
-        type: 'single',
-        options: [
-          { value: 'today', label: t.assessment.q1.opt1 },
-          { value: '1-3days', label: t.assessment.q1.opt2 },
-          { value: '4-7days', label: t.assessment.q1.opt3 },
-          { value: 'week+', label: t.assessment.q1.opt4 }
-        ]
-      },
-      {
-        id: 'severity',
-        question: t.assessment.q2.question,
-        type: 'single',
-        options: [
-          { value: 'mild', label: t.assessment.q2.opt1 },
-          { value: 'moderate', label: t.assessment.q2.opt2 },
-          { value: 'severe', label: t.assessment.q2.opt3 },
-          { value: 'very-severe', label: t.assessment.q2.opt4 }
-        ]
-      },
-      {
-        id: 'progression',
-        question: t.assessment.q3.question,
-        type: 'single',
-        options: [
-          { value: 'better', label: t.assessment.q3.opt1 },
-          { value: 'same', label: t.assessment.q3.opt2 },
-          { value: 'worse', label: t.assessment.q3.opt3 },
-          { value: 'fluctuates', label: t.assessment.q3.opt4 }
-        ]
-      },
-      {
-        id: 'symptoms',
-        question: t.assessment.q4.question,
-        description: t.assessment.q4.description,
-        type: 'multiple',
-        options: [
-          { value: 'fever', label: t.assessment.q4.opt1 },
-          { value: 'pain', label: t.assessment.q4.opt2 },
-          { value: 'breathing', label: t.assessment.q4.opt3 },
-          { value: 'dizziness', label: t.assessment.q4.opt4 },
-          { value: 'nausea', label: t.assessment.q4.opt5 },
-          { value: 'vomiting', label: t.assessment.q4.opt6 },
-          { value: 'weakness', label: t.assessment.q4.opt7 },
-          { value: 'none', label: t.assessment.q4.opt8 }
-        ]
-      }
-    ]
-
-    const conditionalQuestions = []
-
-    // If breathing difficulty is selected, ask follow-up
-    if (currentAnswers.symptoms?.includes('breathing')) {
-      conditionalQuestions.push({
-        id: 'breathing_now',
-        question: t.assessment.q5.question,
-        type: 'single',
-        options: [
-          { value: 'yes', label: t.assessment.q5.opt1 },
-          { value: 'no', label: t.assessment.q5.opt2 },
-          { value: 'sometimes', label: t.assessment.q5.opt3 }
-        ]
-      })
-    }
-
-    // If pain is selected, ask about location
-    if (currentAnswers.symptoms?.includes('pain')) {
-      conditionalQuestions.push({
-        id: 'pain_location',
-        question: t.assessment.q6.question,
-        description: t.assessment.q6.description,
-        type: 'multiple',
-        options: [
-          { value: 'head', label: t.assessment.q6.opt1 },
-          { value: 'chest', label: t.assessment.q6.opt2 },
-          { value: 'abdomen', label: t.assessment.q6.opt3 },
-          { value: 'back', label: t.assessment.q6.opt4 },
-          { value: 'limbs', label: t.assessment.q6.opt5 },
-          { value: 'other', label: t.assessment.q6.opt6 }
-        ]
-      })
-    }
-
-    return [...baseQuestions, ...conditionalQuestions]
+  const selectOption = (value) => { 
+    if (currentQuestion.multi) 
+      setAnswers(previous => ({ 
+        ...previous, 
+        [currentQuestion.id]: value === 'none' ? ['none'] : selected.includes(value) ? selected.filter(item => item !== value) : [...selected.filter(item => item !== 'none'), value] 
+      }))
+    else 
+      setAnswers(previous => ({ ...previous, [currentQuestion.id]: value })) 
   }
 
-  const allQuestions = getQuestions()
-  const currentQuestion = allQuestions[currentQuestionIndex]
-  const isLastQuestion = currentQuestionIndex === allQuestions.length - 1
-  const isComplete = currentQuestionIndex >= allQuestions.length
-
-  // Initialize selected options when question changes
-  useEffect(() => {
-    if (currentQuestion) {
-      const previousAnswer = answers[currentQuestion.id]
-      if (currentQuestion.type === 'multiple') {
-        setSelectedOptions(previousAnswer || [])
-      } else {
-        setSelectedOptions(previousAnswer ? [previousAnswer] : [])
-      }
+  const continueQuestion = () => { 
+      if (!selected.length) return
+    
+      // Save answers before moving to next question or completion
+      const updatedAnswers = { ...answers }
+      onUpdateData({ assessmentAnswers: updatedAnswers })
+    
+      // Move to next question or mark complete
+      setQuestionIndex(index => index + 1) 
     }
-  }, [currentQuestionIndex, answers, language])
 
-  const handleOptionSelect = (value) => {
-    if (!currentQuestion) return
-
-    if (currentQuestion.type === 'multiple') {
-      // Handle "None of these" selection
-      if (value === 'none') {
-        setSelectedOptions(['none'])
-      } else {
-        // Remove "none" if other options are selected
-        const newSelection = selectedOptions.includes(value)
-          ? selectedOptions.filter(v => v !== value)
-          : [...selectedOptions.filter(v => v !== 'none'), value]
-        setSelectedOptions(newSelection)
-      }
-    } else {
-      setSelectedOptions([value])
-    }
-  }
-
-  const handleContinue = () => {
-    if (!currentQuestion) return
-
-    // Save answer
-    const answer = currentQuestion.type === 'multiple' ? selectedOptions : selectedOptions[0]
-    const newAnswers = { ...answers, [currentQuestion.id]: answer }
-    if (currentQuestion.id === 'symptoms') {
-      if (!selectedOptions.includes('breathing')) delete newAnswers.breathing_now
-      if (!selectedOptions.includes('pain')) delete newAnswers.pain_location
-    }
-    setAnswers(newAnswers)
-
-    // Move to next question or complete
-    if (isLastQuestion) {
-      // Save to patientData
-      onUpdateData({ assessmentAnswers: newAnswers })
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-    } else {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-    }
-  }
-
-  const handleBack = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1)
-    } else {
-      onNavigate(4)
-    }
-  }
-
-  const canContinue = selectedOptions.length > 0
-
-  if (isComplete) {
-    return (
-      <div className="scrollable-content">
-        <div className="content-wrapper">
-          <div className="assessment-complete">
-            <div className="complete-icon-wrapper">
-              <Icons.CheckCircle />
+  if (complete) {
+      console.log('SymptomAssessment complete. Saved answers:', answers)
+      console.log('Navigating to screen 6 (Documents)')
+    
+      return (
+        <div className="scrollable-content">
+          <div className="content-wrapper">
+            <div className="assessment-complete">
+              <div className="complete-icon-wrapper">
+                <Icons.CheckCircle />
+              </div>
+              <h1 className="complete-title">{t.assessment.complete.title}</h1>
+              <p className="complete-text">{t.assessment.complete.text}</p>
+              <button className="continue-button full-width" onClick={() => {
+                console.log('Continue button clicked, navigating to screen 6')
+                onNavigate(6)
+              }}>
+                {t.assessment.complete.button} →
+              </button>
             </div>
-            
-            <h1 className="complete-title">{t.assessment.complete.title}</h1>
-            <p className="complete-text">{t.assessment.complete.text}</p>
-            
-            <button
-              className="continue-button full-width"
-              onClick={() => onNavigate(6)}
-            >
-              {t.assessment.complete.button} →
-            </button>
           </div>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
   return (
     <div className="scrollable-content">
       <div className="content-wrapper">
-        {/* Introduction (only show on first question) */}
-        {currentQuestionIndex === 0 && (
-          <div className="header-card">
-            <div className="ai-badge">
-              <span aria-hidden="true">✦</span>
-              <span>{t.assessment.badge}</span>
-            </div>
-            <h3 className="header-card-title">{t.assessment.title}</h3>
-            <p className="header-card-subtitle">{t.assessment.subtitle}</p>
+        <div className="header-card">
+          <div className="ai-badge">
+            <span aria-hidden="true">✦</span>
+            <span>{t.assessment.badge}</span>
           </div>
-        )}
-
-        {/* Question Card */}
+          <h3 className="header-card-title">
+            {t.assessment.title} {pilesCase ? t.assessment.titlePiles : t.assessment.titleFever}
+          </h3>
+          <p className="header-card-subtitle">{t.assessment.subtitle}</p>
+        </div>
+        
         <div className="question-card">
-          {/* Progress indicator */}
           <div className="question-progress">
             <p className="progress-text">
-              {t.assessment.progress} {currentQuestionIndex + 1} {t.assessment.of} {allQuestions.length}
+              {t.assessment.progress} {questionIndex + 1} {t.assessment.of} {questions.length}
             </p>
+            <div className="question-progress-track">
+              <span style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} />
+            </div>
           </div>
-
-          {/* Question */}
-          <h2 className="question-title">{currentQuestion.question}</h2>
           
+          <h2 className="question-title">{currentQuestion.question}</h2>
           {currentQuestion.description && (
             <p className="question-description">{currentQuestion.description}</p>
           )}
-
-          {/* Options */}
+          
           <div className="options-list">
-            {currentQuestion.options.map((option) => {
-              const isSelected = selectedOptions.includes(option.value)
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => handleOptionSelect(option.value)}
-                  className={`option-button ${isSelected ? 'selected' : ''}`}
-                >
-                  <div className="option-radio">
-                    {isSelected && <div className="option-radio-dot" />}
-                  </div>
-                  <span className="option-label">{option.label}</span>
-                </button>
-              )
-            })}
+            {currentQuestion.options.map(([label, value]) => (
+              <button 
+                key={value} 
+                className={`option-button ${selected.includes(value) ? 'selected' : ''}`} 
+                onClick={() => selectOption(value)}
+              >
+                <span className="option-radio">
+                  {selected.includes(value) && <span className="option-radio-dot" />}
+                </span>
+                <span className="option-label">{label}</span>
+              </button>
+            ))}
           </div>
         </div>
-
-        {/* Navigation Buttons */}
+        
         <div className="action-buttons">
-          <button className="back-button" onClick={handleBack}>
+          <button 
+            className="back-button" 
+            onClick={() => questionIndex ? setQuestionIndex(index => index - 1) : onNavigate(4)}
+          >
             ← {t.assessment.back}
           </button>
           <div className="pagination">
-            {allQuestions.map((_, idx) => (
-              <span
-                key={idx}
-                className={`page-dot ${idx < currentQuestionIndex ? 'completed' : idx === currentQuestionIndex ? 'active' : ''}`}
+            {questions.map((_, index) => (
+              <span 
+                key={index} 
+                className={`page-dot ${index < questionIndex ? 'completed' : index === questionIndex ? 'active' : ''}`} 
               />
             ))}
           </div>
-          <button
-            className={`continue-button ${!canContinue ? 'disabled' : ''}`}
-            onClick={handleContinue}
-            disabled={!canContinue}
+          <button 
+            className={`continue-button ${!selected.length ? 'disabled' : ''}`} 
+            disabled={!selected.length} 
+            onClick={continueQuestion}
           >
-            {isLastQuestion ? t.assessment.finish : t.assessment.continue} →
+            {questionIndex === questions.length - 1 ? t.assessment.finish : t.assessment.continue} →
           </button>
         </div>
       </div>

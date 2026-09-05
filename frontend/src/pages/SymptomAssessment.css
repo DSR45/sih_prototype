@@ -180,3 +180,5 @@
     font-size: 21px;
   }
 }
+.question-progress-track { height: 5px; overflow: hidden; margin-top: 8px; border-radius: 99px; background: #e0f2fe; }
+.question-progress-track span { display: block; height: 100%; border-radius: inherit; background: #0e7490; transition: width .2s ease; }

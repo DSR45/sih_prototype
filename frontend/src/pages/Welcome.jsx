@@ -1,11 +1,13 @@
+import { useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
 import './Welcome.css'
 
-function Welcome({ onNavigate }) {
+function Welcome({ onNavigate, onLanguageChange, onUpdateData, patientData }) {
   const { language } = useLanguage()
   const t = translations[language]
+  const [selectedLanguage, setSelectedLanguage] = useState(language)
 
   const features = [
     {
@@ -24,6 +26,23 @@ function Welcome({ onNavigate }) {
       desc: t.welcome.feature3Description
     }
   ]
+
+  const languages = [
+    { id: 'en', label: t.language.english, flag: '🇺🇸' },
+    { id: 'hi', label: t.language.hindi, flag: '🇮🇳' }
+  ]
+
+  const handleSelectLanguage = (langId) => {
+    setSelectedLanguage(langId)
+    const selectedLang = langId === 'en' ? 'English' : 'हिन्दी'
+    onLanguageChange(langId)
+    onUpdateData({ language: selectedLang })
+  }
+
+  const handleStartJourney = () => {
+    // Navigate directly to Patient Information (skip old language screen)
+    onNavigate(3)
+  }
 
   return (
     <div className="welcome-page-wrapper">
@@ -55,16 +74,37 @@ function Welcome({ onNavigate }) {
             ))}
           </div>
 
-          {/* CTA Section */}
+          {/* Language Selection Section */}
+          <div className="welcome-language-section">
+            <h3 className="language-section-title">{t.language.title}</h3>
+            <p className="language-section-subtitle">{t.language.subtitle}</p>
+            
+            <div className="welcome-language-options">
+              {languages.map((lang) => (
+                <button
+                  key={lang.id}
+                  className={`welcome-language-card ${selectedLanguage === lang.id ? 'selected' : ''}`}
+                  onClick={() => handleSelectLanguage(lang.id)}
+                >
+                  <span className="welcome-language-flag">{lang.flag}</span>
+                  <span className="welcome-language-name">{lang.label}</span>
+                  {selectedLanguage === lang.id && (
+                    <span className="welcome-checkmark">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+                    {/* CTA Section */}
           <div className="welcome-cta-section">
             <button 
               className="welcome-cta-button"
-              onClick={() => onNavigate(2)}
+              onClick={handleStartJourney}
             >
               <span>{t.welcome.cta}</span>
               <Icons.ArrowRight />
             </button>
-            <p className="welcome-cta-subtext">{t.welcome.ctaSubtext}</p>
           </div>
         </div>
       </div>
