@@ -12,7 +12,7 @@ import './App.css'
 
 const persistedState = (() => {
   try {
-    return JSON.parse(localStorage.getItem('bloodbridge-demo-state') || 'null')
+    return JSON.parse(localStorage.getItem('medikiosk-demo-state') || 'null')
   } catch {
     return null
   }
@@ -37,9 +37,10 @@ function App() {
   }))
 
   const handleNavigate = useCallback((screenNumber) => {
-    setCurrentScreen(screenNumber)
-    window.scrollTo(0, 0)
-  }, [])
+      console.log('App.jsx: Navigating from screen', currentScreen, 'to screen', screenNumber)
+      setCurrentScreen(screenNumber)
+      window.scrollTo(0, 0)
+    }, [currentScreen])
 
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage)
@@ -66,7 +67,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('bloodbridge-demo-state', JSON.stringify({ currentScreen, patientData, workflowData }))
+    localStorage.setItem('medikiosk-demo-state', JSON.stringify({ currentScreen, patientData, workflowData }))
   }, [currentScreen, patientData, workflowData])
 
   const renderScreen = () => {

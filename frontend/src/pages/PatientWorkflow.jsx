@@ -1,332 +1,566 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useLanguage } from '../context/LanguageContext'
+import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
-import {
-  DonorCard,
-  LoadingOrb,
-  RequestCard,
-  StatusBadge,
-  Timeline,
-  UrgencyIndicator,
-  WorkflowActionBar,
-  WorkflowProgress
-} from '../components/WorkflowComponents'
 import './PatientWorkflow.css'
 
-const hospitals = {
-  name: 'CityCare Medical Centre',
-  address: '18 MG Road, Bengaluru',
-  eta: '12 min away'
-}
-
-const donorPool = [
-  { initials: 'AS', label: 'Verified donor A', match: 'Compatible', verification: 'Verified', availability: 'Available now', distance: '2.4 km away', reliability: '98% reliable' },
-  { initials: 'RK', label: 'Verified donor B', match: 'Compatible', verification: 'Verified', availability: 'Available in 15 min', distance: '4.1 km away', reliability: '96% reliable' },
-  { initials: 'NP', label: 'Verified donor C', match: 'Compatible', verification: 'Verified', availability: 'On call', distance: '6.8 km away', reliability: '94% reliable' }
-]
-
-const trackingSteps = [
-  { label: 'Request created', detail: 'Your request is registered' },
-  { label: 'Donor matched', detail: 'A compatible donor was found' },
-  { label: 'Donor confirmed', detail: 'The donor accepted the request' },
-  { label: 'Donor on the way', detail: 'Estimated arrival is 12 minutes' },
-  { label: 'Arrived', detail: 'Hospital reception notified' },
-  { label: 'Completed', detail: 'Care coordination completed' }
-]
-
-const requestTimeline = [
-  { label: 'Request created', detail: 'Today, 10:42 AM' },
-  { label: 'Matching', detail: 'Prioritising verified, available donors' },
-  { label: 'Donors notified', detail: 'Waiting for the best response' }
-]
-
-const defaultWorkflow = {
-  requestId: 'BB-240918-042',
-  urgency: 'High',
-  hospital: hospitals,
-  bloodComponent: 'Packed red blood cells',
-  bloodGroup: 'Group confirmation pending',
-  requestStatus: 'Request created',
-  requestStage: 0,
-  donorPhase: 0,
-  trackingStage: 2,
-  confirmedAt: '',
-  startedAt: ''
-}
-
 export function getInitialWorkflow() {
-  return defaultWorkflow
+  return { documents: [], assessmentComplete: false, carePath: '', completedAt: '' }
 }
 
-function urgencyFor(patientData) {
-  const answers = patientData.assessmentAnswers || {}
-  if (answers.severity === 'severe' || answers.severity === 'very-severe' || answers.breathing_now === 'yes') return 'High'
-  return 'Moderate'
+export function isPilesComplaint(complaint = '') {
+  return /bleed|blood|stool|piles|hemorrhoid|खून|मल|बवासीर/i.test(complaint)
 }
 
-function WorkflowLayout({ screen, title, children, className = '' }) {
+function Layout({ screen, title, children }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.documents) {
+    console.error('Translations not loaded properly for language:', language)
+    return null
+  }
+  
   return (
-    <main className={`workflow-scroll ${className}`}>
-      <WorkflowProgress screen={screen} title={title} />
-      <div className="workflow-container">{children}</div>
+    <main className="workflow-scroll">
+      <div className="workflow-container">
+        <div className="workflow-step">
+          <span>{t.documents.step} {screen - 5} {t.assessment.of} 5</span>
+          <strong>{title}</strong>
+          <small>{t.assessment.badge}</small>
+        </div>
+        {children}
+      </div>
     </main>
   )
 }
 
-function Intro({ eyebrow, title, description, children }) {
+function HeaderBlock({ eyebrow, title, description, children }) {
   return (
     <div className="workflow-intro">
       <div>
         {eyebrow && <span className="workflow-eyebrow">{eyebrow}</span>}
         <h1>{title}</h1>
-        {description && <p>{description}</p>}
+        <p>{description}</p>
       </div>
       {children}
     </div>
   )
 }
 
-function SectionCard({ title, action, children, className = '' }) {
+function Card({ title, action, children }) {
   return (
-    <section className={`workflow-card workflow-section-card ${className}`}>
-      <div className="workflow-card-heading"><h2>{title}</h2>{action}</div>
+    <section className="workflow-card">
+      <div className="workflow-card-heading">
+        <h2>{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   )
 }
 
-function KeyValue({ label, value }) {
-  return <div className="key-value"><span>{label}</span><strong>{value || 'Not provided'}</strong></div>
+function ActionBar({ onBack, onPrimary, primaryLabel, secondaryLabel, onSecondary, backLabel }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.documents) {
+    return (
+      <div className="workflow-actions">
+        <button className="workflow-button workflow-button-ghost" onClick={onBack}>← Back</button>
+        <button className="workflow-button workflow-button-primary" onClick={onPrimary}>{primaryLabel} <span>→</span></button>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="workflow-actions">
+      <button className="workflow-button workflow-button-ghost" onClick={onBack}>
+        ← {backLabel || t.documents.back}
+      </button>
+      <div>
+        {secondaryLabel && (
+          <button className="workflow-button workflow-button-outline" onClick={onSecondary}>
+            {secondaryLabel}
+          </button>
+        )}
+        <button className="workflow-button workflow-button-primary" onClick={onPrimary}>
+          {primaryLabel} <span>→</span>
+        </button>
+      </div>
+    </div>
+  )
 }
 
-function ReviewScreen({ patientData, workflowData, updateWorkflow, onNavigate }) {
-  const urgency = workflowData.urgency || urgencyFor(patientData)
-  const answers = patientData.assessmentAnswers || {}
-  const symptoms = answers.symptoms?.includes('none') ? 'None reported' : (answers.symptoms || []).join(', ') || 'Not provided'
-  const answerLabels = {
-    symptom_start: { today: 'Today', '1-3days': '1-3 days ago', '4-7days': '4-7 days ago', 'week+': 'More than a week ago' },
-    severity: { mild: 'Mild', moderate: 'Moderate', severe: 'Severe', 'very-severe': 'Very severe' },
-    progression: { better: 'Getting better', same: 'Staying the same', worse: 'Getting worse', fluctuates: 'Comes and goes' }
+function DocumentsScreen({ workflowData, updateWorkflow, onNavigate }) {
+  console.log('DocumentsScreen rendering')
+  const { language } = useLanguage()
+  console.log('DocumentsScreen language:', language)
+  const t = translations[language] || translations.en
+  console.log('DocumentsScreen translations loaded:', !!t, 'has documents key:', !!(t && t.documents))
+  
+  if (!t || !t.documents) {
+    console.error('DocumentsScreen: Translations not loaded for language:', language)
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', fontSize: '18px', background: '#fff', minHeight: '400px' }}>
+        <h2>Loading translations...</h2>
+        <p>Language: {language}</p>
+        <p>Translations object exists: {t ? 'Yes' : 'No'}</p>
+        <p>Documents key exists: {(t && t.documents) ? 'Yes' : 'No'}</p>
+      </div>
+    )
   }
-  const setConfirmed = () => {
-    updateWorkflow({ ...defaultWorkflow, urgency, startedAt: new Date().toISOString() })
+  
+  console.log('DocumentsScreen: About to render main content')
+  const inputRef = useRef(null)
+  const [documents, setDocuments] = useState(() => 
+    (workflowData.documents || []).filter(document => document && document.name)
+  )
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const addFiles = (fileList) => {
+    const files = [...fileList].filter(file => /^(application\/pdf|image\/(jpeg|png))$/.test(file.type))
+    if (!files.length) return
+    
+    setUploading(true)
+    setProgress(15)
+    const timer = setInterval(() => setProgress(value => Math.min(value + 25, 100)), 120)
+    
+    setTimeout(() => {
+      clearInterval(timer)
+      setDocuments(current => [
+        ...current,
+        ...files.map(file => ({
+          id: `${file.name}-${file.lastModified}-${Math.random()}`,
+          name: file.name,
+          type: file.type,
+          size: file.size
+        }))
+      ])
+      setUploading(false)
+      setProgress(100)
+    }, 520)
+  }
+
+  const continueToSummary = () => {
+    updateWorkflow({ documents })
     onNavigate(7)
   }
 
   return (
-    <WorkflowLayout screen={6} title="Review & confirm">
-      <Intro eyebrow="Before we continue" title="Review your care request" description="Check the details below. You can edit any section before we start finding the right care pathway.">
-        <UrgencyIndicator level={urgency} detail="Based on your answers" />
-      </Intro>
-      <div className="review-grid">
-        <SectionCard title="Patient information" action={<button className="edit-button" onClick={() => onNavigate(3)}>Edit</button>}>
-          <div className="key-value-grid"><KeyValue label="Full name" value={patientData.fullName} /><KeyValue label="Age" value={patientData.age} /><KeyValue label="Gender" value={patientData.gender} /><KeyValue label="Mobile" value={patientData.mobile} /></div>
-        </SectionCard>
-        <SectionCard title="Main concern" action={<button className="edit-button" onClick={() => onNavigate(4)}>Edit</button>}>
-          <p className="review-quote">{patientData.chiefComplaint || 'No written description provided.'}</p>
-        </SectionCard>
-        <SectionCard title="Guided symptom answers" action={<button className="edit-button" onClick={() => onNavigate(5)}>Edit</button>}>
-          <div className="key-value-grid"><KeyValue label="Started" value={answerLabels.symptom_start[answers.symptom_start]} /><KeyValue label="Severity" value={answerLabels.severity[answers.severity]} /><KeyValue label="Progression" value={answerLabels.progression[answers.progression]} /><KeyValue label="Symptoms" value={symptoms} />{answers.breathing_now && <KeyValue label="Breathing now" value={answers.breathing_now} />}{answers.pain_location && <KeyValue label="Pain location" value={answers.pain_location.join(', ')} />}</div>
-        </SectionCard>
-        <SectionCard title="Care destination">
-          <div className="destination-row"><span className="destination-icon"><Icons.Heart /></span><div><strong>{hospitals.name}</strong><span>{hospitals.address} · {hospitals.eta}</span></div><StatusBadge tone="info">Recommended</StatusBadge></div>
-        </SectionCard>
-      </div>
-      <div className="privacy-strip"><Icons.Lock /><span>Your information is used to coordinate care and is shared only with the care team involved in this request.</span></div>
-      <WorkflowActionBar backLabel="Back to assessment" onBack={() => onNavigate(5)} primaryLabel="Confirm & continue" onPrimary={setConfirmed} />
-    </WorkflowLayout>
+    <Layout screen={6} title={t.documents.stepTitle}>
+      <HeaderBlock
+        eyebrow={t.documents.eyebrow}
+        title={t.documents.title}
+        description={t.documents.subtitle}
+      >
+        <span className="soft-badge">{t.documents.optional}</span>
+      </HeaderBlock>
+
+      <Card title={t.documents.cardTitle}>
+        <div
+          className="drop-zone"
+          onDragOver={event => event.preventDefault()}
+          onDrop={event => {
+            event.preventDefault()
+            addFiles(event.dataTransfer.files)
+          }}
+        >
+          <div className="upload-icon"><Icons.File /></div>
+          <strong>{t.documents.dropZoneTitle}</strong>
+          <span>{t.documents.dropZoneSubtitle}</span>
+          <button
+            className="workflow-button workflow-button-outline"
+            onClick={() => inputRef.current?.click()}
+          >
+            {t.documents.chooseFiles}
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            hidden
+            multiple
+            accept="application/pdf,image/jpeg,image/png"
+            onChange={event => addFiles(event.target.files)}
+          />
+        </div>
+
+        {uploading && (
+          <div className="upload-progress">
+            <span>{t.documents.uploadProgress}</span>
+            <strong>{progress}%</strong>
+            <div><i style={{ width: `${progress}%` }} /></div>
+          </div>
+        )}
+      </Card>
+
+      <Card title={`${t.documents.attachedTitle} (${documents.length})`}>
+        {documents.length ? (
+          <div className="document-list">
+            {documents.map(document => (
+              <div className="document-row" key={document.id}>
+                <span className="file-icon">
+                  {document.type === 'application/pdf' ? 'PDF' : 'IMG'}
+                </span>
+                <div>
+                  <strong>{document.name}</strong>
+                  <small>
+                    {document.type === 'application/pdf' ? 'PDF document' : 'Image report'} · {(document.size / 1024).toFixed(0)} KB
+                  </small>
+                </div>
+                <button
+                  className="remove-button"
+                  onClick={() => setDocuments(current => current.filter(item => item.id !== document.id))}
+                >
+                  {t.documents.remove}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-documents">
+            <span><Icons.File /></span>
+            <div>
+              <strong>{t.documents.noDocuments}</strong>
+              <p>{t.documents.noDocumentsText}</p>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <ActionBar
+        onBack={() => onNavigate(5)}
+        onPrimary={continueToSummary}
+        primaryLabel={t.documents.continue}
+        backLabel={t.documents.back}
+        secondaryLabel={t.documents.skip}
+        onSecondary={() => {
+          updateWorkflow({ documents: [] })
+          onNavigate(7)
+        }}
+      />
+    </Layout>
   )
 }
 
-function ProcessingScreen({ updateWorkflow, onNavigate }) {
-  const [progress, setProgress] = useState(0)
-  const steps = ['Reviewing your information', 'Assessing urgency', 'Preparing next steps', 'Finding an appropriate care pathway']
+function SummaryScreen({ patientData, workflowData, onNavigate }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.summary) {
+    console.error('SummaryScreen: Translations not loaded for language:', language)
+    return <div>Loading translations...</div>
+  }
+  const answers = patientData.assessmentAnswers || {}
+  const complaintType = isPilesComplaint(patientData.chiefComplaint) ? t.summary.piles : t.summary.fever
 
-  useEffect(() => {
-    const started = Date.now()
-    const interval = setInterval(() => {
-      const next = Math.min(100, Math.round(((Date.now() - started) / 3600) * 100))
-      setProgress(next)
-      if (next === 100) {
-        clearInterval(interval)
-        updateWorkflow({ requestStatus: 'Care pathway ready' })
-        setTimeout(() => onNavigate(8), 350)
-      }
-    }, 120)
-    return () => clearInterval(interval)
-  }, [onNavigate, updateWorkflow])
+  const formatSymptoms = (symptomsArray) => {
+    if (!Array.isArray(symptomsArray)) return 'None reported'
+    const filtered = symptomsArray.filter(value => value !== 'none')
+    return filtered.length ? filtered.join(', ') : 'None reported'
+  }
 
-  return (
-    <WorkflowLayout screen={7} title="Assessment">
-      <div className="processing-state">
-        <LoadingOrb label="Reviewing your care request" />
-        <span className="workflow-eyebrow">One moment</span>
-        <h1>Preparing your care pathway</h1>
-        <p>We are organising your information so the next step is clear and actionable.</p>
-        <div className="processing-bar"><span style={{ width: `${progress}%` }} /></div>
-        <div className="processing-steps">{steps.map((step, index) => <div className={progress >= (index + 1) * 25 ? 'is-complete' : ''} key={step}><span>{progress >= (index + 1) * 25 ? '✓' : index + 1}</span>{step}</div>)}</div>
-      </div>
-    </WorkflowLayout>
-  )
-}
-
-function RecommendationScreen({ workflowData, updateWorkflow, onNavigate }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const urgency = workflowData.urgency || 'High'
-  return (
-    <WorkflowLayout screen={8} title="Recommendation">
-      <Intro eyebrow="Care pathway" title="Here is the recommended next step" description="This recommendation is based on the information you provided and the availability of local care support."><StatusBadge tone="info">Decision support</StatusBadge></Intro>
-      <div className="recommendation-layout">
-        <section className="recommendation-banner"><UrgencyIndicator level={urgency} detail="Needs prompt attention" /><div><span className="workflow-eyebrow">Recommended action</span><h2>Coordinate blood support with the hospital care team</h2><p>We will look for a compatible, verified donor who can reach the hospital quickly.</p></div></section>
-        <SectionCard title="Why this recommendation?"><ul className="reason-list"><li><span>01</span><div><strong>Compatibility first</strong><p>Your request is matched against the required component and group confirmation.</p></div></li><li><span>02</span><div><strong>Verification and screening</strong><p>Only verified donors who meet configured screening criteria are notified.</p></div></li><li><span>03</span><div><strong>Distance and reliability</strong><p>Availability, response history, and travel time influence matching priority.</p></div></li></ul></SectionCard>
-        <SectionCard title="Recommended facility"><div className="facility-card"><div className="facility-pin">⌖</div><div><h3>{hospitals.name}</h3><p>{hospitals.address}</p><span>Emergency coordination desk · {hospitals.eta}</span></div></div></SectionCard>
-      </div>
-      <div className="notice-card"><strong>Important</strong><span>This is decision support, not a medical diagnosis. If symptoms become life-threatening, contact local emergency services immediately.</span></div>
-      {detailsOpen && <div className="details-panel"><strong>Matching logic</strong><p>Compatibility → verification → configured screening → availability → reliability → distance/ETA → notification → confirmation.</p></div>}
-      <WorkflowActionBar backLabel="Back to review" onBack={() => onNavigate(6)} secondaryLabel={detailsOpen ? 'Hide details' : 'View details'} onSecondary={() => setDetailsOpen(!detailsOpen)} primaryLabel="Continue" onPrimary={() => { updateWorkflow({ requestStatus: 'Matching started', requestStage: 1 }); onNavigate(9) }} />
-    </WorkflowLayout>
-  )
-}
-
-function RequestStatusScreen({ workflowData, updateWorkflow, onNavigate }) {
-  const [stage, setStage] = useState(workflowData.requestStage || 0)
-  useEffect(() => {
-    const timer = setInterval(() => setStage(value => Math.min(value + 1, requestTimeline.length - 1)), 1400)
-    return () => clearInterval(timer)
-  }, [])
-  useEffect(() => { updateWorkflow({ requestStage: stage, requestStatus: requestTimeline[stage].label }) }, [stage, updateWorkflow])
-  return (
-    <WorkflowLayout screen={9} title="Care request">
-      <Intro eyebrow="Blood support request" title="Your request is moving forward" description="We are coordinating with the hospital while verified donors are notified."><StatusBadge tone={stage === 2 ? 'success' : 'info'}>{requestTimeline[stage].label}</StatusBadge></Intro>
-      <div className="request-overview-grid"><SectionCard title="Request details"><div className="key-value-grid"><KeyValue label="Request ID" value={workflowData.requestId} /><KeyValue label="Component" value={workflowData.bloodComponent} /><KeyValue label="Blood group" value={workflowData.bloodGroup} /><KeyValue label="Hospital" value={hospitals.name} /></div></SectionCard><UrgencyIndicator level={workflowData.urgency || 'High'} detail="Prompt coordination" /></div>
-      <SectionCard title="Status timeline"><Timeline items={requestTimeline} activeIndex={stage} /></SectionCard>
-      <div className="response-meter"><div><span className="workflow-label">Estimated response</span><strong>{stage === 2 ? 'Searching for confirmation' : 'Within the next few minutes'}</strong></div><div className="meter-track"><span style={{ width: `${35 + stage * 25}%` }} /></div></div>
-      <WorkflowActionBar backLabel="Back" onBack={() => onNavigate(8)} primaryLabel="Find donors" onPrimary={() => { updateWorkflow({ requestStatus: 'Donor search active' }); onNavigate(10) }} />
-    </WorkflowLayout>
-  )
-}
-
-function DonorMatchingScreen({ workflowData, onNavigate }) {
-  return (
-    <WorkflowLayout screen={10} title="Donor matching">
-      <Intro eyebrow="Verified donor network" title="Finding the right donor" description="We prioritise compatibility, verification, availability, reliability, and travel time in that order."><StatusBadge tone="success">3 suitable matches</StatusBadge></Intro>
-      <section className="matching-hero"><div className="matching-ring"><span>98%</span><small>match quality</small></div><div><h2>Compatibility checked</h2><p>Screened donors near {hospitals.name} are being ranked for a fast, dependable response.</p></div></section>
-      <div className="logic-strip"><span>Compatibility</span><b>→</b><span>Verified</span><b>→</b><span>Available</span><b>→</b><span>Reliable</span><b>→</b><span>Nearby</span></div>
-      <div className="donor-list">{donorPool.map((donor, index) => <DonorCard key={donor.label} donor={donor} highlighted={index === 0} />)}</div>
-      <p className="privacy-caption"><Icons.Lock /> Donor names and contact details stay private until a confirmation is made.</p>
-      <WorkflowActionBar backLabel="Back to request" onBack={() => onNavigate(9)} primaryLabel="Start live matching" onPrimary={() => onNavigate(11)} />
-    </WorkflowLayout>
-  )
-}
-
-function LiveMatchingScreen({ workflowData, updateWorkflow, onNavigate }) {
-  const [phase, setPhase] = useState(workflowData.donorPhase || 0)
-  const phases = [
-    { title: 'Contacting the best match', detail: 'A verified donor is being notified.', tone: 'info' },
-    { title: 'Donor contacted', detail: 'Waiting for a response from the first suitable donor.', tone: 'warning' },
-    { title: 'Moving to the next suitable donor', detail: 'The first donor did not respond in time. Your request stays active.', tone: 'info' },
-    { title: 'Donor accepted', detail: 'A verified compatible donor has accepted your request.', tone: 'success' }
+  const values = isPilesComplaint(patientData.chiefComplaint) ? [
+    [t.summary.answerLabels.duration, answers.duration || 'Not provided'],
+    [t.summary.answerLabels.bloodColour, answers.bloodColour || 'Not provided'],
+    [t.summary.answerLabels.pain, answers.pain || 'Not provided'],
+    [t.summary.answerLabels.lump, answers.lump || 'Not provided'],
+    [t.summary.answerLabels.constipation, answers.constipation || 'Not provided'],
+    [t.summary.answerLabels.frequency, answers.frequency || 'Not provided']
+  ] : [
+    [t.summary.answerLabels.duration, answers.duration || '2-3 days'],
+    [t.summary.answerLabels.temperature, answers.temperature || 'Around 101°F'],
+    [t.summary.answerLabels.symptoms, formatSymptoms(answers.symptoms)],
+    [t.summary.answerLabels.seriousSymptoms, formatSymptoms(answers.seriousSymptoms)]
   ]
+
+  const docCount = (workflowData.documents || []).length
+  const docText = docCount 
+    ? `${docCount} ${docCount > 1 ? t.summary.documentsCountPlural : t.summary.documentsCount} ${t.summary.documentsAttached}`
+    : t.summary.noDocuments
+
+  return (
+    <Layout screen={7} title={t.summary.stepTitle}>
+      <HeaderBlock
+        eyebrow={t.summary.eyebrow}
+        title={t.summary.title}
+        description={t.summary.subtitle}
+      >
+        <span className="soft-badge">{t.summary.badge}</span>
+      </HeaderBlock>
+
+      <div className="summary-grid">
+        <Card
+          title={t.summary.complaintTitle}
+          action={<button className="text-link" onClick={() => onNavigate(4)}>{t.summary.edit}</button>}
+        >
+          <p className="complaint-quote">{patientData.chiefComplaint || complaintType}</p>
+          <span className="demo-note">{t.summary.demoCase} {complaintType}</span>
+        </Card>
+
+        <Card
+          title={t.summary.answersTitle}
+          action={<button className="text-link" onClick={() => onNavigate(5)}>{t.summary.edit}</button>}
+        >
+          <div className="answer-grid">
+            {values.map(([label, value]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{String(value).replaceAll('-', ' ')}</strong>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title={t.summary.documentsTitle}>
+          <div className="summary-documents">
+            <Icons.File />
+            <strong>{docText}</strong>
+            <button className="text-link" onClick={() => onNavigate(6)}>{t.summary.edit}</button>
+          </div>
+        </Card>
+      </div>
+
+      <div className="privacy-note">
+        <Icons.Lock /> {t.summary.privacyNote}
+      </div>
+
+      <ActionBar
+        onBack={() => onNavigate(6)}
+        onPrimary={() => onNavigate(8)}
+        primaryLabel={t.summary.continue}
+        backLabel={t.summary.back}
+      />
+    </Layout>
+  )
+}
+
+function AssessmentScreen({ patientData, updateWorkflow, onNavigate }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.assessmentResult) {
+    console.error('AssessmentScreen: Translations not loaded for language:', language)
+    return <div>Loading translations...</div>
+  }
+  const answer = patientData.assessmentAnswers || {}
+  const urgent = (answer.seriousSymptoms || []).some(value => value !== 'none') || answer.bloodColour === 'dark'
+
   useEffect(() => {
-    if (phase >= phases.length - 1) return undefined
-    const timer = setTimeout(() => setPhase(value => value + 1), 1700)
+    updateWorkflow({ carePath: urgent ? 'urgent' : 'routine', assessmentComplete: true })
+  }, [urgent, updateWorkflow])
+
+  const complaintType = isPilesComplaint(patientData.chiefComplaint) ? t.summary.piles : t.summary.fever
+
+  return (
+    <Layout screen={8} title={t.assessmentResult.stepTitle}>
+      <div className="result-state">
+        <div className={`result-mark ${urgent ? 'warning' : ''}`}>
+          {urgent ? '!' : <Icons.CheckCircle />}
+        </div>
+        <span className="workflow-eyebrow">{t.assessmentResult.eyebrow}</span>
+        <h1>{t.assessmentResult.title}</h1>
+        <p>{t.assessmentResult.subtitle}</p>
+      </div>
+
+      <div className={`assessment-banner ${urgent ? 'urgent' : ''}`}>
+        <strong>{urgent ? t.assessmentResult.bannerUrgent : t.assessmentResult.bannerRoutine}</strong>
+        <span>{t.assessmentResult.disclaimer}</span>
+      </div>
+
+      <div className="assessment-columns">
+        <Card title={t.assessmentResult.symptomsTitle}>
+          <ul className="check-list">
+            <li>{t.assessmentResult.symptom1} {complaintType}</li>
+            <li>{t.assessmentResult.symptom2}</li>
+            <li>
+              {(() => {
+                const symptoms = patientData.assessmentAnswers?.symptoms
+                if (!Array.isArray(symptoms)) return 'No additional symptoms selected'
+                const filtered = symptoms.filter(item => item !== 'none')
+                return filtered.length ? filtered.join(', ') : 'No additional symptoms selected'
+              })()}
+            </li>
+          </ul>
+        </Card>
+
+        <Card title={t.assessmentResult.observationTitle}>
+          <p className="observation-text">
+            {urgent ? t.assessmentResult.observationUrgent : t.assessmentResult.observationRoutine}
+          </p>
+        </Card>
+      </div>
+
+      <ActionBar
+        onBack={() => onNavigate(7)}
+        onPrimary={() => onNavigate(9)}
+        primaryLabel={t.assessmentResult.continue}
+        backLabel={t.assessmentResult.back}
+      />
+    </Layout>
+  )
+}
+
+function NextStepScreen({ workflowData, onNavigate }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.nextStep) {
+    console.error('NextStepScreen: Translations not loaded for language:', language)
+    return <div>Loading translations...</div>
+  }
+  const urgent = workflowData.carePath === 'urgent'
+
+  return (
+    <Layout screen={9} title={t.nextStep.stepTitle}>
+      <HeaderBlock
+        eyebrow={t.nextStep.eyebrow}
+        title={t.nextStep.title}
+        description={t.nextStep.subtitle}
+      >
+        <span className={`path-badge ${urgent ? 'urgent' : ''}`}>
+          {urgent ? t.nextStep.pathUrgent : t.nextStep.pathRoutine}
+        </span>
+      </HeaderBlock>
+
+      <section className={`next-step-card ${urgent ? 'urgent' : ''}`}>
+        <div className="next-step-icon">
+          {urgent ? '!' : <Icons.Heart />}
+        </div>
+        <div>
+          <span className="workflow-eyebrow">{t.nextStep.actionEyebrow}</span>
+          <h2>{urgent ? t.nextStep.actionUrgentTitle : t.nextStep.actionRoutineTitle}</h2>
+          <p>{urgent ? t.nextStep.actionUrgentText : t.nextStep.actionRoutineText}</p>
+        </div>
+      </section>
+
+      <Card title={t.nextStep.whatNextTitle}>
+        <div className="care-steps">
+          <div>
+            <b>1</b>
+            <span>
+              <strong>{t.nextStep.step1Title}</strong>
+              <small>{t.nextStep.step1Text}</small>
+            </span>
+          </div>
+          <div>
+            <b>2</b>
+            <span>
+              <strong>{urgent ? t.nextStep.step2UrgentTitle : t.nextStep.step2RoutineTitle}</strong>
+              <small>{urgent ? t.nextStep.step2UrgentText : t.nextStep.step2RoutineText}</small>
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      <div className="disclaimer">
+        {t.nextStep.disclaimer}
+      </div>
+
+      <ActionBar
+        onBack={() => onNavigate(8)}
+        onPrimary={() => onNavigate(10)}
+        primaryLabel={urgent ? t.nextStep.continueUrgent : t.nextStep.continueRoutine}
+        backLabel={t.nextStep.back}
+      />
+    </Layout>
+  )
+}
+
+function CompletionScreen({ patientData, workflowData, updateWorkflow, onNavigate }) {
+  const { language } = useLanguage()
+  const t = translations[language] || translations.en
+  
+  if (!t || !t.completion) {
+    console.error('CompletionScreen: Translations not loaded for language:', language)
+    return <div>Loading translations...</div>
+  }
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false)
+      updateWorkflow({ completedAt: new Date().toISOString() })
+    }, 650)
     return () => clearTimeout(timer)
-  }, [phase])
-  useEffect(() => {
-    updateWorkflow({ donorPhase: phase })
-    if (phase === phases.length - 1) updateWorkflow({ requestStatus: 'Donor confirmed', confirmedAt: new Date().toISOString() })
-  }, [phase, updateWorkflow])
-  const current = phases[phase]
-  return (
-    <WorkflowLayout screen={11} title="Live matching">
-      <div className="live-matching-state"><div className={`live-signal ${current.tone}`}><span /><span /><span /></div><span className="workflow-eyebrow">Live donor response</span><h1>{current.title}</h1><p>{current.detail}</p><StatusBadge tone={current.tone}>{phase === 3 ? 'Response received' : 'Matching in progress'}</StatusBadge></div>
-      <div className="contact-feed"><div className="feed-heading"><strong>Activity</strong><span>Updates automatically</span></div>{phases.slice(0, phase + 1).map((item, index) => <div className={`feed-item ${index === phase ? 'is-current' : ''}`} key={item.title}><span className="feed-check">{index < phase ? '✓' : '•'}</span><div><strong>{item.title}</strong><small>{item.detail}</small></div><time>{index === phase ? 'Now' : `${(phase - index) * 2}m ago`}</time></div>)}</div>
-      <WorkflowActionBar backLabel="Back to matches" onBack={() => onNavigate(10)} primaryLabel={phase === 3 ? 'View donor confirmation' : 'Waiting for response'} primaryDisabled={phase !== 3} onPrimary={() => onNavigate(12)} />
-    </WorkflowLayout>
-  )
-}
+  }, [updateWorkflow])
 
-function DonorConfirmedScreen({ workflowData, onNavigate }) {
   return (
-    <WorkflowLayout screen={12} title="Donor confirmed">
-      <div className="confirmation-state"><div className="confirmation-mark"><Icons.CheckCircle /></div><span className="workflow-eyebrow">Response received</span><h1>Donor confirmed</h1><p>A compatible, verified donor has accepted your request and is coordinating with the hospital.</p><StatusBadge tone="success">Notifications paused</StatusBadge></div>
-      <div className="confirmation-grid"><SectionCard title="Confirmed match"><div className="confirmed-match"><div className="donor-avatar">AS</div><div><h3>Verified donor A</h3><p>Compatible · Verified · 98% reliable</p></div><StatusBadge tone="success">Confirmed</StatusBadge></div></SectionCard><SectionCard title="Arrival information"><div className="key-value-grid"><KeyValue label="Expected arrival" value="12 minutes" /><KeyValue label="Hospital" value={hospitals.name} /><KeyValue label="Location" value={hospitals.address} /><KeyValue label="Request ID" value={workflowData.requestId} /></div></SectionCard></div>
-      <div className="notice-card success-notice"><strong>Coordination is active</strong><span>Other donor notifications have stopped. Please keep your phone available for hospital instructions.</span></div>
-      <WorkflowActionBar backLabel="Back to live matching" onBack={() => onNavigate(11)} secondaryLabel="Contact coordination" onSecondary={() => window.alert('The hospital coordination desk will call the number on your request.')} primaryLabel="Track live status" onPrimary={() => onNavigate(13)} />
-    </WorkflowLayout>
-  )
-}
+    <Layout screen={10} title={t.completion.stepTitle}>
+      {loading ? (
+        <div className="loading-state">
+          <div className="spinner" />
+          <span className="workflow-eyebrow">{t.completion.loadingEyebrow}</span>
+          <h1>{t.completion.loadingTitle}</h1>
+          <p>{t.completion.loadingText}</p>
+        </div>
+      ) : (
+        <>
+          <div className="result-state completion">
+            <div className="result-mark">
+              <Icons.CheckCircle />
+            </div>
+            <span className="workflow-eyebrow">{t.completion.eyebrow}</span>
+            <h1>{t.completion.title}</h1>
+            <p>{patientData.fullName || t.completion.patient} {t.completion.subtitle}</p>
+          </div>
 
-function TrackingScreen({ workflowData, updateWorkflow, onNavigate }) {
-  const [stage, setStage] = useState(workflowData.trackingStage ?? 2)
-  useEffect(() => {
-    if (stage >= trackingSteps.length - 1) return undefined
-    const timer = setTimeout(() => setStage(value => Math.min(value + 1, trackingSteps.length - 1)), 1900)
-    return () => clearTimeout(timer)
-  }, [stage])
-  useEffect(() => { updateWorkflow({ trackingStage: stage }) }, [stage, updateWorkflow])
-  return (
-    <WorkflowLayout screen={13} title="Live status">
-      <Intro eyebrow="Emergency coordination" title={trackingSteps[stage].label} description="Your care team can see this same status as the request moves through coordination."><StatusBadge tone={stage >= 4 ? 'success' : 'info'}>Updated just now</StatusBadge></Intro>
-      <div className="tracking-summary"><div><span className="workflow-label">Estimated arrival</span><strong>{stage >= 4 ? 'Arrived at hospital' : '12 minutes'}</strong><small>{hospitals.name} · {hospitals.address}</small></div><div className="tracking-id"><span>Request ID</span><strong>{workflowData.requestId}</strong></div></div>
-      <SectionCard title="Request progress"><Timeline items={trackingSteps} activeIndex={stage} /></SectionCard>
-      <div className="last-updated"><span className="live-dot" />Last updated just now · Status refreshes automatically</div>
-      <WorkflowActionBar backLabel="Back to confirmation" onBack={() => onNavigate(12)} primaryLabel={stage >= 5 ? 'View completion' : 'Continue tracking'} primaryDisabled={stage < 5} onPrimary={() => onNavigate(14)} />
-    </WorkflowLayout>
-  )
-}
+          <Card title={t.completion.overviewTitle}>
+            <div className="answer-grid">
+              <div>
+                <span>{t.completion.patient}</span>
+                <strong>{patientData.fullName || t.completion.patient}</strong>
+              </div>
+              <div>
+                <span>{t.completion.documents}</span>
+                <strong>{(workflowData.documents || []).length} {t.completion.documentsAttached}</strong>
+              </div>
+              <div>
+                <span>{t.completion.pathway}</span>
+                <strong>
+                  {workflowData.carePath === 'urgent' ? t.completion.pathwayUrgent : t.completion.pathwayRoutine}
+                </strong>
+              </div>
+            </div>
+          </Card>
 
-function CompletionScreen({ workflowData, onNavigate }) {
-  return (
-    <WorkflowLayout screen={14} title="Request complete">
-      <div className="completion-state"><div className="completion-mark"><Icons.CheckCircle /></div><span className="workflow-eyebrow">Care journey complete</span><h1>Request completed</h1><p>Your blood support request was completed successfully. Thank you for helping care move forward.</p><StatusBadge tone="success">Completed</StatusBadge></div>
-      <div className="completion-summary"><KeyValue label="Completion time" value="Today, 11:18 AM" /><KeyValue label="Hospital" value={hospitals.name} /><KeyValue label="Request ID" value={workflowData.requestId} /><KeyValue label="Donor contribution" value="Verified donor support received" /></div>
-      <div className="acknowledgement"><span className="ack-icon">♥</span><div><strong>Every contribution matters</strong><p>Your donor's time and care helped the hospital team respond.</p></div></div>
-      <WorkflowActionBar primaryLabel="View request summary" onPrimary={() => onNavigate(15)} secondaryLabel="Back to home" onSecondary={() => onNavigate(16)} />
-    </WorkflowLayout>
-  )
-}
+          <div className="success-note">
+            <Icons.CheckCircle /> {t.completion.successNote}
+          </div>
 
-function HistoryScreen({ workflowData, onNavigate }) {
-  const [open, setOpen] = useState(false)
-  const requests = [{ date: 'Today · 11:18 AM', type: 'Blood support request', hospital: hospitals.name, status: 'Completed', statusTone: 'success', urgency: workflowData.urgency || 'High' }, { date: '12 Jun 2026 · 4:20 PM', type: 'Care coordination', hospital: 'Northside General Hospital', status: 'Completed', statusTone: 'success', urgency: 'Moderate' }, { date: '03 Mar 2026 · 9:05 AM', type: 'Blood availability check', hospital: 'CityCare Medical Centre', status: 'Closed', statusTone: 'neutral', urgency: 'Low' }]
-  return (
-    <WorkflowLayout screen={15} title="Request history">
-      <Intro eyebrow="Your records" title="Patient history" description="A private record of your previous care requests and outcomes."><button className="workflow-button workflow-button-outline" onClick={() => onNavigate(16)}>Dashboard</button></Intro>
-      <div className="history-list">{requests.map((request, index) => <RequestCard key={request.date} request={request} onOpen={() => setOpen(open === index ? false : index)} />)}</div>
-      {open !== false && <SectionCard title="Request details" className="history-detail"><div className="key-value-grid"><KeyValue label="Request ID" value={open === 0 ? workflowData.requestId : 'BB-ARCHIVE-018'} /><KeyValue label="Outcome" value="Care coordination completed" /><KeyValue label="Facility" value={requests[open].hospital} /><KeyValue label="Privacy" value="Shared with care team only" /></div></SectionCard>}
-      <WorkflowActionBar backLabel="Back to completion" onBack={() => onNavigate(14)} primaryLabel="Back to home" onPrimary={() => onNavigate(16)} />
-    </WorkflowLayout>
-  )
-}
-
-function DashboardScreen({ patientData, workflowData, onNavigate }) {
-  const [noticeOpen, setNoticeOpen] = useState(false)
-  return (
-    <WorkflowLayout screen={16} title="Patient home" className="dashboard-screen">
-      <div className="dashboard-topline"><div><span className="workflow-eyebrow">Good morning</span><h1>{patientData.fullName || 'Patient'}<span className="name-dot">.</span></h1></div><button className="notification-button" aria-label="Notifications" onClick={() => setNoticeOpen(!noticeOpen)}><span className="notification-dot" /><Icons.CheckCircle /></button></div>
-      {noticeOpen && <div className="notification-panel"><strong>No new notifications</strong><span>Your request updates will appear here.</span></div>}
-      <section className="active-request-card"><div className="active-request-heading"><div><span className="workflow-eyebrow">Latest request</span><h2>Blood support coordination</h2></div><StatusBadge tone="success">Completed</StatusBadge></div><div className="active-request-details"><div><span>Hospital</span><strong>{hospitals.name}</strong></div><div><span>Request ID</span><strong>{workflowData.requestId}</strong></div><div><span>Outcome</span><strong>Care completed</strong></div></div><button className="text-button" onClick={() => onNavigate(15)}>View request history <Icons.ArrowRight /></button></section>
-      <div className="dashboard-grid"><button className="quick-action" onClick={() => onNavigate(4)}><span className="quick-icon">+</span><span><strong>Create a new request</strong><small>Start a fresh care journey</small></span><Icons.ArrowRight /></button><button className="quick-action" onClick={() => onNavigate(15)}><span className="quick-icon">⌁</span><span><strong>Previous requests</strong><small>Review your care history</small></span><Icons.ArrowRight /></button></div>
-      <div className="dashboard-lower"><SectionCard title="Profile"><div className="profile-row"><div className="profile-avatar">{(patientData.fullName || 'P').charAt(0).toUpperCase()}</div><div><strong>{patientData.fullName || 'Patient'}</strong><span>{patientData.mobile || 'Contact number not provided'}</span></div><button className="edit-button" onClick={() => onNavigate(3)}>Edit</button></div></SectionCard><SectionCard title="Help & support"><div className="support-row"><span className="support-icon">?</span><div><strong>Need help?</strong><span>Contact the care coordination desk</span></div><Icons.ArrowRight /></div></SectionCard></div>
-      <p className="dashboard-footnote"><Icons.Lock /> Your patient information is private and protected.</p>
-    </WorkflowLayout>
+          <ActionBar
+            onBack={() => onNavigate(9)}
+            onPrimary={() => {
+              localStorage.removeItem('medikiosk-demo-state')
+              window.location.reload()
+            }}
+            primaryLabel={t.completion.restart}
+            backLabel={t.completion.back}
+          />
+        </>
+      )}
+    </Layout>
   )
 }
 
 export default function PatientWorkflow({ screen, patientData, workflowData, updateWorkflow, onNavigate }) {
+  console.log('PatientWorkflow rendering screen:', screen)
+  console.log('Patient data:', patientData)
+  console.log('Workflow data:', workflowData)
+  
   const props = { patientData, workflowData, updateWorkflow, onNavigate }
-  switch (screen) {
-    case 6: return <ReviewScreen {...props} />
-    case 7: return <ProcessingScreen {...props} />
-    case 8: return <RecommendationScreen {...props} />
-    case 9: return <RequestStatusScreen {...props} />
-    case 10: return <DonorMatchingScreen {...props} />
-    case 11: return <LiveMatchingScreen {...props} />
-    case 12: return <DonorConfirmedScreen {...props} />
-    case 13: return <TrackingScreen {...props} />
-    case 14: return <CompletionScreen {...props} />
-    case 15: return <HistoryScreen {...props} />
-    case 16: return <DashboardScreen {...props} />
-    default: return <ReviewScreen {...props} />
+  
+  const screens = {
+    6: <DocumentsScreen {...props} />,
+    7: <SummaryScreen {...props} />,
+    8: <AssessmentScreen {...props} />,
+    9: <NextStepScreen {...props} />,
+    10: <CompletionScreen {...props} />
   }
+  
+  const screenToRender = screens[screen] || <DocumentsScreen {...props} />
+  console.log('Rendering screen component for screen:', screen)
+  
+  return screenToRender
 }
