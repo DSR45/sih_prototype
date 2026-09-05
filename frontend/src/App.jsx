@@ -70,19 +70,21 @@ function App() {
     localStorage.setItem('medikiosk-demo-state', JSON.stringify({ currentScreen, patientData, workflowData }))
   }, [currentScreen, patientData, workflowData])
 
-  const renderScreen = () => {
+    const renderScreen = () => {
     switch (currentScreen) {
       case 1:
-        return <Welcome onNavigate={handleNavigate} />
-      case 2:
         return (
-          <LanguageSelection
-            patientData={patientData}
+          <Welcome 
             onNavigate={handleNavigate}
-            onUpdateData={handleUpdateData}
             onLanguageChange={handleLanguageChange}
+            onUpdateData={handleUpdateData}
+            patientData={patientData}
           />
         )
+      case 2:
+        // Old language selection screen - redirect to welcome if accessed directly
+        handleNavigate(1)
+        return null
       case 3:
         return (
           <PatientInformation
@@ -128,7 +130,14 @@ function App() {
           />
         )
       default:
-        return <Welcome onNavigate={handleNavigate} />
+        return (
+          <Welcome 
+            onNavigate={handleNavigate}
+            onLanguageChange={handleLanguageChange}
+            onUpdateData={handleUpdateData}
+            patientData={patientData}
+          />
+        )
     }
   }
 

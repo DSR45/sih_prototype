@@ -4,11 +4,15 @@ import './ProgressBar.css'
 
 const screenConfig = {
   1: { title: 'Welcome', percentage: 0, hide: true },
-  2: { title: 'Language Selection', percentage: 20, step: 1, totalSteps: 5 },
-  3: { title: 'Patient Information', percentage: 40, step: 2, totalSteps: 5 },
-  4: { title: 'Chief Complaint', percentage: 60, step: 3, totalSteps: 5 },
-  5: { title: 'Symptom Assessment', percentage: 80, step: 4, totalSteps: 5 },
-  6: { title: 'Complete', hide: true }
+  2: { title: 'Welcome', percentage: 0, hide: true }, // Old language screen - now merged with welcome
+  3: { title: 'Patient Information', percentage: 25, step: 1, totalSteps: 4 },
+  4: { title: 'Chief Complaint', percentage: 50, step: 2, totalSteps: 4 },
+  5: { title: 'Symptom Assessment', percentage: 75, step: 3, totalSteps: 4 },
+  6: { title: 'Documents', percentage: 100, step: 4, totalSteps: 4 },
+  7: { title: 'Complete', hide: true },
+  8: { title: 'Complete', hide: true },
+  9: { title: 'Complete', hide: true },
+  10: { title: 'Complete', hide: true }
 }
 
 function ProgressBar({ currentScreen }) {
@@ -20,12 +24,12 @@ function ProgressBar({ currentScreen }) {
     return null // Don't show progress bar on welcome screen
   }
 
-  const { percentage, step, totalSteps } = config
+    const { percentage, step, totalSteps } = config
   const titles = {
-    2: t.progress.languageSelection,
     3: t.progress.patientInfo,
     4: t.progress.chiefComplaint,
-    5: t.progress.symptomAssessment
+    5: t.progress.symptomAssessment,
+    6: t.documents?.stepTitle || 'Documents'
   }
 
   return (
