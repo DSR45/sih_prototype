@@ -7,7 +7,10 @@ CREATE TABLE sessions (
     chief_complaint TEXT NOT NULL,
     complaint_category VARCHAR(50),
     consent_given BOOLEAN DEFAULT FALSE,
+    consent_timestamp TIMESTAMPTZ,
     red_flag BOOLEAN DEFAULT FALSE,
-    status VARCHAR(20) DEFAULT 'Pending',
+    red_flag_reason TEXT,
+    status VARCHAR(20) DEFAULT 'in_progress'
+        CHECK (status IN ('in_progress', 'submitted', 'reviewed')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
