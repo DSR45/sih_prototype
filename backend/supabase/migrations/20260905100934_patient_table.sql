@@ -1,4 +1,3 @@
-
 CREATE TABLE patients (
     patient_id TEXT PRIMARY KEY,
     full_name VARCHAR(100) NOT NULL,
