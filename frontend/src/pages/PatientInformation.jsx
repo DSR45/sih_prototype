@@ -144,17 +144,17 @@ function PatientInformation({ patientData, onNavigate, onUpdateData }) {
           </div>
         </div>
 
-        <div className="action-buttons">
+                <div className="action-buttons">
           <button 
             className="back-button"
-            onClick={() => onNavigate(2)}
+            onClick={() => onNavigate(1)}
           >
             ← {t.patient.back}
           </button>
           <div className="pagination">
-            <span className="page-dot"></span>
-            <span className="page-dot"></span>
             <span className="page-dot active"></span>
+            <span className="page-dot"></span>
+            <span className="page-dot"></span>
             <span className="page-dot"></span>
           </div>
           <button 

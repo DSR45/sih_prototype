@@ -102,7 +102,7 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
           </div>
         </div>
 
-        <div className="action-buttons">
+                <div className="action-buttons">
           <button 
             className="back-button"
             onClick={() => onNavigate(3)}
@@ -111,9 +111,9 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
           </button>
           <div className="pagination">
             <span className="page-dot"></span>
-            <span className="page-dot"></span>
-            <span className="page-dot"></span>
             <span className="page-dot active"></span>
+            <span className="page-dot"></span>
+            <span className="page-dot"></span>
           </div>
           <button className="continue-button" onClick={() => onNavigate(5)}>{t.complaint.continue} →</button>
         </div>
