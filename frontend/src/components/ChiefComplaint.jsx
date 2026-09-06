@@ -115,7 +115,11 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
             <span className="page-dot"></span>
             <span className="page-dot"></span>
           </div>
+<<<<<<< HEAD
           <button className="continue-button" onClick={() => onNavigate(5)}>{t.complaint.continue} →</button>
+=======
+          <button className="continue-button" onClick={() => onNavigate(1)}>{t.complaint.continue} →</button>
+>>>>>>> 2363c96bc7e3a6641e403fc28b53f7a4cd15a028
         </div>
       </div>
     </div>

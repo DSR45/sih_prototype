@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState,useState } from 'react'
 import { LanguageProvider } from './context/LanguageContext'
 import Header from './components/Header'
 import ProgressBar from './components/ProgressBar'
@@ -8,6 +8,8 @@ import PatientInformation from './pages/PatientInformation'
 import ChiefComplaint from './components/ChiefComplaint'
 import SymptomAssessment from './pages/SymptomAssessment'
 import PatientWorkflow, { getInitialWorkflow } from './pages/PatientWorkflow'
+import DoctorLogin from './pages/DoctorLogin'
+import DoctorDashboard from './pages/DoctorDashboard'
 import './App.css'
 
 const persistedState = (() => {
@@ -19,17 +21,18 @@ const persistedState = (() => {
 })()
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState(persistedState?.currentScreen || 1)
-  const [language, setLanguage] = useState(() => localStorage.getItem('medikiosk-language') || 'en')
-  const [patientData, setPatientData] = useState({
-    language: (localStorage.getItem('medikiosk-language') || 'en') === 'en' ? 'English' : 'हिन्दी',
-    fullName: '',
-    age: '',
-    gender: '',
-    mobile: '',
-    chiefComplaint: '',
-    assessmentAnswers: null,
-    ...persistedState?.patientData
+  const [currentScreen, setCurrentScreen] = useState(0)
+  const [doctorView, setDoctorView] = useState(false)
+  const [patientData, setPatientData] = useState(() => {
+    const savedData = localStorage.getItem('medikiosk-patient-data')
+    return savedData ? JSON.parse(savedData) : {
+      language: (localStorage.getItem('medikiosk-language') || 'en') === 'en' ? 'English' : 'हिन्दी',
+      fullName: '',
+      age: '',
+      gender: '',
+      mobile: '',
+      chiefComplaint: ''
+    }
   })
   const [workflowData, setWorkflowData] = useState(() => ({
     ...getInitialWorkflow(),
@@ -41,6 +44,14 @@ function App() {
       setCurrentScreen(screenNumber)
       window.scrollTo(0, 0)
     }, [currentScreen])
+  useEffect(() => {
+    localStorage.setItem('medikiosk-patient-data', JSON.stringify(patientData))
+  }, [patientData])
+
+  const handleNavigate = (screenNumber) => {
+    setCurrentScreen(screenNumber)
+    window.scrollTo(0, 0)
+  }
 
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage)
@@ -71,7 +82,22 @@ function App() {
   }, [currentScreen, patientData, workflowData])
 
     const renderScreen = () => {
+  const renderScreen = () => {
+    if (doctorView) {
+      return (
+        <DoctorDashboard
+          onLogout={() => setDoctorView(false)}
+          onPatientAccess={() => {
+            setDoctorView(false)
+            handleNavigate(1)
+          }}
+        />
+      )
+    }
+
     switch (currentScreen) {
+      case 0:
+        return <DoctorLogin onLogin={() => setDoctorView(true)} onPatientAccess={() => handleNavigate(1)} />
       case 1:
         return (
           <Welcome 
@@ -144,12 +170,12 @@ function App() {
   return (
     <LanguageProvider language={language} onLanguageChange={handleLanguageChange}>
       <div className="app-container">
-        <Header />
-        <ProgressBar currentScreen={currentScreen} />
+        {currentScreen > 0 && <Header />}
+        {currentScreen > 0 && <ProgressBar currentScreen={currentScreen} />}
         {renderScreen()}
       </div>
     </LanguageProvider>
   )
 }
-
+}
 export default App
