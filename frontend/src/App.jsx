@@ -2,8 +2,8 @@ import { useEffect, useState,useState } from 'react'
 import { LanguageProvider } from './context/LanguageContext'
 import Header from './components/Header'
 import ProgressBar from './components/ProgressBar'
+import DemoLanding from './pages/DemoLanding'
 import Welcome from './pages/Welcome'
-import LanguageSelection from './pages/LanguageSelection'
 import PatientInformation from './pages/PatientInformation'
 import ChiefComplaint from './components/ChiefComplaint'
 import SymptomAssessment from './pages/SymptomAssessment'
@@ -21,36 +21,38 @@ const persistedState = (() => {
 })()
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState(0)
-  const [doctorView, setDoctorView] = useState(false)
-  const [patientData, setPatientData] = useState(() => {
-    const savedData = localStorage.getItem('medikiosk-patient-data')
-    return savedData ? JSON.parse(savedData) : {
-      language: (localStorage.getItem('medikiosk-language') || 'en') === 'en' ? 'English' : 'हिन्दी',
-      fullName: '',
-      age: '',
-      gender: '',
-      mobile: '',
-      chiefComplaint: ''
-    }
+  const [currentScreen, setCurrentScreen] = useState(persistedState?.currentScreen || 0)
+  const [userType, setUserType] = useState(persistedState?.userType || null) // 'patient' or 'doctor'
+  const [language, setLanguage] = useState(() => localStorage.getItem('medikiosk-language') || 'en')
+  const [patientData, setPatientData] = useState({
+    language: (localStorage.getItem('medikiosk-language') || 'en') === 'en' ? 'English' : 'हिन्दी',
+    fullName: '',
+    age: '',
+    gender: '',
+    mobile: '',
+    chiefComplaint: '',
+    assessmentAnswers: null,
+    ...persistedState?.patientData
   })
   const [workflowData, setWorkflowData] = useState(() => ({
     ...getInitialWorkflow(),
     ...persistedState?.workflowData
   }))
+  const [doctorLoggedIn, setDoctorLoggedIn] = useState(false)
 
   const handleNavigate = useCallback((screenNumber) => {
-      console.log('App.jsx: Navigating from screen', currentScreen, 'to screen', screenNumber)
-      setCurrentScreen(screenNumber)
-      window.scrollTo(0, 0)
-    }, [currentScreen])
-  useEffect(() => {
-    localStorage.setItem('medikiosk-patient-data', JSON.stringify(patientData))
-  }, [patientData])
-
-  const handleNavigate = (screenNumber) => {
+    console.log('App.jsx: Navigating from screen', currentScreen, 'to screen', screenNumber)
     setCurrentScreen(screenNumber)
     window.scrollTo(0, 0)
+  }, [currentScreen])
+
+  const handleDemoChoice = (type) => {
+    setUserType(type)
+    if (type === 'patient') {
+      setCurrentScreen(1) // Go to patient welcome screen
+    } else if (type === 'doctor') {
+      setCurrentScreen(-1) // Go to doctor login screen
+    }
   }
 
   const handleLanguageChange = (newLanguage) => {
@@ -77,24 +79,55 @@ function App() {
     }))
   }, [])
 
-  useEffect(() => {
-    localStorage.setItem('medikiosk-demo-state', JSON.stringify({ currentScreen, patientData, workflowData }))
-  }, [currentScreen, patientData, workflowData])
+  const handleDoctorLogin = () => {
+    setDoctorLoggedIn(true)
+    setCurrentScreen(-2) // Go to doctor dashboard
+  }
 
-    const renderScreen = () => {
+  const handleDoctorLogout = () => {
+    setDoctorLoggedIn(false)
+    setUserType(null)
+    setCurrentScreen(0) // Back to demo landing
+  }
+
+  useEffect(() => {
+    localStorage.setItem('medikiosk-demo-state', JSON.stringify({ 
+      currentScreen, 
+      userType,
+      patientData, 
+      workflowData 
+    }))
+  }, [currentScreen, userType, patientData, workflowData])
+
   const renderScreen = () => {
-    if (doctorView) {
+    // Demo Landing Screen
+    if (currentScreen === 0) {
+      return <DemoLanding onNavigate={handleDemoChoice} />
+    }
+
+    // Doctor Login Screen
+    if (currentScreen === -1) {
       return (
-        <DoctorDashboard
-          onLogout={() => setDoctorView(false)}
-          onPatientAccess={() => {
-            setDoctorView(false)
-            handleNavigate(1)
+        <DoctorLogin 
+          onLogin={handleDoctorLogin}
+          onBack={() => {
+            setUserType(null)
+            setCurrentScreen(0)
           }}
         />
       )
     }
 
+    // Doctor Dashboard
+    if (currentScreen === -2 && doctorLoggedIn) {
+      return (
+        <DoctorDashboard
+          onLogout={handleDoctorLogout}
+        />
+      )
+    }
+
+    // Patient Workflow
     switch (currentScreen) {
       case 0:
         return <DoctorLogin onLogin={() => setDoctorView(true)} onPatientAccess={() => handleNavigate(1)} />
@@ -108,7 +141,7 @@ function App() {
           />
         )
       case 2:
-        // Old language selection screen - redirect to welcome if accessed directly
+        // Old language selection screen - redirect to welcome
         handleNavigate(1)
         return null
       case 3:
@@ -156,26 +189,22 @@ function App() {
           />
         )
       default:
-        return (
-          <Welcome 
-            onNavigate={handleNavigate}
-            onLanguageChange={handleLanguageChange}
-            onUpdateData={handleUpdateData}
-            patientData={patientData}
-          />
-        )
+        return <DemoLanding onNavigate={handleDemoChoice} />
     }
   }
+
+  const showHeader = currentScreen > 0 && currentScreen !== -1 && currentScreen !== -2
+  const showProgressBar = currentScreen > 0
 
   return (
     <LanguageProvider language={language} onLanguageChange={handleLanguageChange}>
       <div className="app-container">
-        {currentScreen > 0 && <Header />}
-        {currentScreen > 0 && <ProgressBar currentScreen={currentScreen} />}
+        {showHeader && <Header />}
+        {showProgressBar && <ProgressBar currentScreen={currentScreen} />}
         {renderScreen()}
       </div>
     </LanguageProvider>
   )
 }
-}
+
 export default App
