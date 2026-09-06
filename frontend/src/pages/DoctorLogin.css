@@ -1,0 +1,77 @@
+.doctor-login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(380px, 44%) 1fr;
+  background: #f8fafb;
+  color: #18323b;
+}
+.doctor-login-visual { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 58px clamp(36px, 6vw, 96px) 42px; background: #123b43; color: #f5fbf9; }
+.visual-grid { position: absolute; inset: 0; opacity: .12; background-image: linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(135deg, black, transparent 75%); }
+.visual-content, .visual-footer { position: relative; z-index: 1; }
+.visual-mark, .mobile-brand-mark { display: grid; place-items: center; color: #123b43; background: #b8e0d5; }
+.visual-mark { width: 52px; height: 52px; border-radius: 15px; margin-bottom: 68px; }
+.visual-mark svg, .mobile-brand-mark svg { width: 25px; height: 25px; }
+.visual-eyebrow, .login-kicker { margin: 0 0 17px; color: #8fcec0; font-size: 11px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.visual-content h1 { max-width: 440px; margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(40px, 4.5vw, 68px); font-weight: 400; line-height: 1.04; letter-spacing: 0; }
+.visual-description { max-width: 385px; margin: 26px 0 0; color: #c2d7d4; font-size: 16px; line-height: 1.7; }
+.clinical-note { display: flex; align-items: flex-start; gap: 13px; max-width: 390px; margin-top: 58px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.2); }
+.clinical-note-icon { color: #8fcec0; flex: 0 0 22px; }
+.clinical-note-icon svg { width: 22px; height: 22px; }
+.clinical-note strong, .clinical-note span { display: block; }
+.clinical-note strong { margin-bottom: 5px; font-size: 13px; }
+.clinical-note span { color: #a9c4c1; font-size: 12px; line-height: 1.5; }
+.visual-footer { margin: 0; color: #82a7a6; font-size: 11px; letter-spacing: .04em; }
+.doctor-login-panel { display: flex; align-items: center; justify-content: center; padding: 48px 7vw; }
+.doctor-login-form-wrap { width: min(100%, 420px); animation: loginReveal .65s ease both; }
+@keyframes loginReveal { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.mobile-brand { display: none; align-items: center; gap: 8px; margin-bottom: 58px; color: #123b43; font-size: 16px; font-weight: 800; }
+.mobile-brand-mark { width: 31px; height: 31px; border-radius: 9px; }
+.mobile-brand-mark svg { width: 16px; height: 16px; }
+.login-heading h2 { margin: 0; color: #18323b; font-family: Georgia, 'Times New Roman', serif; font-size: 42px; font-weight: 400; line-height: 1.1; }
+.login-heading > p:last-child { margin: 13px 0 0; color: #71858b; font-size: 14px; line-height: 1.6; }
+.doctor-login-form { margin-top: 34px; }
+.field-label { display: block; margin-bottom: 9px; color: #35525a; font-size: 12px; font-weight: 700; }
+.password-label-row { display: flex; align-items: center; justify-content: space-between; margin-top: 23px; }
+.password-label-row .field-label { margin-bottom: 9px; }
+.input-wrap { display: flex; align-items: center; min-height: 52px; border: 1px solid #d4e0e1; border-radius: 8px; background: #fff; transition: border-color .2s, box-shadow .2s; }
+.input-wrap:focus-within { border-color: #4a9f91; box-shadow: 0 0 0 3px rgba(74,159,145,.13); }
+.input-wrap > svg { width: 18px; height: 18px; margin: 0 12px 0 15px; color: #87a0a4; flex: none; }
+.input-wrap input { min-width: 0; flex: 1; padding: 15px 0; border: 0; outline: 0; background: transparent; color: #18323b; font: inherit; font-size: 14px; }
+.input-wrap input::placeholder { color: #a6b6b9; }
+.visibility-button, .text-button { border: 0; background: transparent; color: #518d84; cursor: pointer; }
+.visibility-button { display: grid; place-items: center; width: 46px; align-self: stretch; }
+.visibility-button svg { width: 18px; height: 18px; }
+.text-button { padding: 0 0 9px; font-size: 11px; font-weight: 700; }
+.text-button:hover, .patient-access-button:hover { color: #286f67; }
+.remember-row { display: flex; align-items: center; gap: 9px; margin: 19px 0 23px; color: #6c8388; font-size: 12px; cursor: pointer; }
+.remember-row input { position: absolute; opacity: 0; }
+.custom-checkbox { display: grid; place-items: center; width: 16px; height: 16px; border: 1px solid #c7d6d7; border-radius: 4px; background: #fff; }
+.custom-checkbox svg { display: none; width: 11px; height: 11px; color: #fff; }
+.remember-row input:checked + .custom-checkbox { border-color: #4a9f91; background: #4a9f91; }
+.remember-row input:checked + .custom-checkbox svg { display: block; }
+.login-submit { display: flex; align-items: center; justify-content: center; gap: 13px; width: 100%; min-height: 52px; border: 0; border-radius: 8px; background: #266d68; color: #fff; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; transition: background .2s, transform .2s; }
+.login-submit:hover { background: #1c5c58; transform: translateY(-1px); }
+.login-submit svg { width: 17px; height: 17px; }
+.form-message { margin: 0 0 14px; padding: 10px 12px; border-radius: 6px; font-size: 12px; }
+.error-message { background: #fff1ef; color: #b54c3e; }
+.success-message { background: #e8f6f0; color: #28755d; }
+.security-note { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 20px 0 28px; color: #8b9da0; font-size: 11px; }
+.security-note svg { width: 13px; height: 13px; }
+.login-divider { display: flex; align-items: center; gap: 13px; color: #9bacb0; font-size: 11px; }
+.login-divider::before, .login-divider::after { content: ''; height: 1px; flex: 1; background: #dce5e5; }
+.patient-access-button { display: block; width: 100%; margin-top: 20px; padding: 0; border: 0; background: transparent; color: #518d84; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; }
+.login-help { margin: 44px 0 0; color: #9aaeb1; text-align: center; font-size: 11px; }
+.login-help a { color: #518d84; font-weight: 700; text-decoration: none; }
+@media (max-width: 760px) {
+  .doctor-login-page { display: block; }
+  .doctor-login-visual { min-height: 235px; padding: 27px 25px 25px; }
+  .visual-mark { width: 38px; height: 38px; margin-bottom: 27px; border-radius: 11px; }
+  .visual-mark svg { width: 19px; height: 19px; }
+  .visual-eyebrow { margin-bottom: 10px; font-size: 9px; }
+  .visual-content h1 { max-width: 500px; font-size: 35px; }
+  .visual-description, .clinical-note { display: none; }
+  .visual-footer { font-size: 10px; }
+  .doctor-login-panel { padding: 37px 25px 42px; }
+  .mobile-brand { display: flex; margin-bottom: 36px; }
+  .login-heading h2 { font-size: 36px; }
+}
