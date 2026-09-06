@@ -21,8 +21,8 @@ const persistedState = (() => {
 })()
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState(persistedState?.currentScreen || 0)
-  const [userType, setUserType] = useState(persistedState?.userType || null) // 'patient' or 'doctor'
+  const [currentScreen, setCurrentScreen] = useState(0) // Always start at Demo Landing
+  const [userType, setUserType] = useState(null) // Always start fresh // 'patient' or 'doctor'
   const [language, setLanguage] = useState(() => localStorage.getItem('medikiosk-language') || 'en')
   const [patientData, setPatientData] = useState({
     language: (localStorage.getItem('medikiosk-language') || 'en') === 'en' ? 'English' : 'हिन्दी',
@@ -32,7 +32,7 @@ function App() {
     mobile: '',
     chiefComplaint: '',
     assessmentAnswers: null,
-    ...persistedState?.patientData
+    // Start fresh - no persisted data
   })
   const [workflowData, setWorkflowData] = useState(() => ({
     ...getInitialWorkflow(),
