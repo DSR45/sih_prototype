@@ -26,3 +26,23 @@ export async function generateAiAssessment(patientData) {
   if (!response.ok) throw new Error(payload.error || 'Could not generate the AI assessment.')
   return payload.assessment
 }
+
+export async function generateFollowUpQuestions({ chiefComplaint, language }) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('AI service is not configured. Add the Supabase URL and anon key to frontend/.env.local.')
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/functions/v1/gemini-follow-up-questions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
+    body: JSON.stringify({ chiefComplaint, language }),
+  })
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'Could not generate follow-up questions.')
+  return payload.questions
+}
