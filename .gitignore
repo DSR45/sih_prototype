@@ -3,4 +3,6 @@ frontend/dist/
 frontend/.vite_backup/
 frontend/node_modules_backup/
 frontend/package-lock_backup.json
+frontend/.env.local
+backend/supabase/.env
 .obsidian/
