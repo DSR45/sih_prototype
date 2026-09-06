@@ -2,17 +2,17 @@ import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import './ProgressBar.css'
 
+import { PATIENT_FLOW, PATIENT_PROGRESS_STEPS } from '../constants/patientFlow'
+
 const screenConfig = {
-  1: { title: 'Welcome', percentage: 0, hide: true },
-  2: { title: 'Welcome', percentage: 0, hide: true }, // Old language screen - now merged with welcome
-  3: { title: 'Patient Information', percentage: 25, step: 1, totalSteps: 4 },
-  4: { title: 'Chief Complaint', percentage: 50, step: 2, totalSteps: 4 },
-  5: { title: 'Symptom Assessment', percentage: 75, step: 3, totalSteps: 4 },
-  6: { title: 'Documents', percentage: 100, step: 4, totalSteps: 4 },
-  7: { title: 'Complete', hide: true },
-  8: { title: 'Complete', hide: true },
-  9: { title: 'Complete', hide: true },
-  10: { title: 'Complete', hide: true }
+  [PATIENT_FLOW.WELCOME]: { title: 'Welcome', percentage: 0, hide: true },
+  [PATIENT_FLOW.PATIENT_LOGIN]: { title: 'Patient Login', percentage: 0, hide: true },
+  [PATIENT_FLOW.PATIENT_INFO]: { title: 'Patient Information', percentage: 25, step: 1, totalSteps: 4 },
+  [PATIENT_FLOW.CHIEF_COMPLAINT]: { title: 'Chief Complaint', percentage: 50, step: 2, totalSteps: 4 },
+  [PATIENT_FLOW.SYMPTOM_ASSESSMENT]: { title: 'Symptom Assessment', percentage: 75, step: 3, totalSteps: 4 },
+  [PATIENT_FLOW.DOCUMENTS]: { title: 'Documents', percentage: 100, step: 4, totalSteps: 4 },
+  [PATIENT_FLOW.SUMMARY]: { title: 'Complete', hide: true },
+  [PATIENT_FLOW.COMPLETION]: { title: 'Complete', hide: true }
 }
 
 function ProgressBar({ currentScreen }) {
@@ -26,10 +26,10 @@ function ProgressBar({ currentScreen }) {
 
     const { percentage, step, totalSteps } = config
   const titles = {
-    3: t.progress.patientInfo,
-    4: t.progress.chiefComplaint,
-    5: t.progress.symptomAssessment,
-    6: t.documents?.stepTitle || 'Documents'
+    [PATIENT_FLOW.PATIENT_INFO]: t.progress.patientInfo,
+    [PATIENT_FLOW.CHIEF_COMPLAINT]: t.progress.chiefComplaint,
+    [PATIENT_FLOW.SYMPTOM_ASSESSMENT]: t.progress.symptomAssessment,
+    [PATIENT_FLOW.DOCUMENTS]: t.documents?.stepTitle || 'Documents'
   }
 
   return (
@@ -50,10 +50,10 @@ function ProgressBar({ currentScreen }) {
         </div>
 
         <div className="step-indicators">
-          {Array.from({ length: totalSteps }).map((_, index) => (
+          {PATIENT_PROGRESS_STEPS.map(({ screen }, index) => (
             <div
-              key={index}
-              className={`step-dot ${index < step ? 'completed' : index === step - 1 ? 'current' : 'pending'}`}
+              key={screen}
+              className={`step-dot ${screen < currentScreen ? 'completed' : screen === currentScreen ? 'current' : 'pending'}`}
             ></div>
           ))}
         </div>

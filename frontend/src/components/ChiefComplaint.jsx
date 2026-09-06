@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from './Icons'
+import ScreenShell from './ScreenShell'
+import StepNavigation from './StepNavigation'
+import { PATIENT_FLOW } from '../constants/patientFlow'
 import './ChiefComplaint.css'
 
 function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
   const { language } = useLanguage()
   const t = translations[language]
-  const [selectedSymptoms, setSelectedSymptoms] = useState([])
+  const [selectedSymptoms, setSelectedSymptoms] = useState(patientData.complaintTags || [])
   const [isListening, setIsListening] = useState(false)
 
   const commonSymptoms = [
@@ -21,9 +24,12 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
   ]
 
   const toggleSymptom = (symptomId) => {
-    setSelectedSymptoms((prev) =>
-      prev.includes(symptomId) ? prev.filter((id) => id !== symptomId) : [...prev, symptomId]
-    )
+    const nextSelected = selectedSymptoms.includes(symptomId)
+      ? selectedSymptoms.filter((id) => id !== symptomId)
+      : [...selectedSymptoms, symptomId]
+
+    setSelectedSymptoms(nextSelected)
+    onUpdateData({ complaintTags: nextSelected })
   }
 
   const handleSpeak = () => {
@@ -36,15 +42,14 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
   }
 
   return (
-    <div className="scrollable-content">
-      <div className="content-wrapper">
-        <div className="header-card">
-          <div className="header-card-icon"><Icons.Heart /></div>
-          <div className="header-card-text">
-            <h3 className="header-card-title">{t.complaint.title}</h3>
-            <p className="header-card-subtitle">{t.complaint.subtitle}</p>
-          </div>
+    <ScreenShell>
+      <div className="header-card">
+        <div className="header-card-icon"><Icons.Heart /></div>
+        <div className="header-card-text">
+          <h3 className="header-card-title">{t.complaint.title}</h3>
+          <p className="header-card-subtitle">{t.complaint.subtitle}</p>
         </div>
+      </div>
 
         <div className="form-section">
           <div className="input-row">
@@ -102,23 +107,15 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
           </div>
         </div>
 
-                <div className="action-buttons">
-          <button 
-            className="back-button"
-            onClick={() => onNavigate(3)}
-          >
-            ← {t.complaint.back}
-          </button>
-          <div className="pagination">
-            <span className="page-dot"></span>
-            <span className="page-dot active"></span>
-            <span className="page-dot"></span>
-            <span className="page-dot"></span>
-          </div>
-          <button className="continue-button" onClick={() => onNavigate(5)}>{t.complaint.continue} →</button>
-        </div>
-      </div>
-    </div>
+      <StepNavigation
+        onBack={() => onNavigate(PATIENT_FLOW.PATIENT_INFO)}
+        onContinue={() => onNavigate(PATIENT_FLOW.SYMPTOM_ASSESSMENT)}
+        backLabel={t.complaint.back}
+        continueLabel={t.complaint.continue}
+        currentStep={1}
+        totalSteps={4}
+      />
+    </ScreenShell>
   )
 }
 

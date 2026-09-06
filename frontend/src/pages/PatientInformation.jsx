@@ -3,6 +3,7 @@ import { genderOptions } from '../data/mockData'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
+import { supabasePatientAdapter } from '../modules/shared/services/supabaseAdapter'
 import './PatientInformation.css'
 
 function PatientInformation({ patientData, onNavigate, onUpdateData }) {
@@ -55,9 +56,50 @@ function PatientInformation({ patientData, onNavigate, onUpdateData }) {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleContinue = () => {
-    if (validateForm()) {
+  const handleContinue = async () => {
+    if (!validateForm()) {
+      return
+    }
+
+    try {
+      const payload = {
+        full_name: patientData.fullName.trim(),
+        age: Number(patientData.age),
+        gender: patientData.gender === 'male' ? 'Male' : patientData.gender === 'female' ? 'Female' : 'Other',
+        phone: patientData.mobile.trim(),
+        preferred_language: patientData.language || 'English'
+      }
+
+      const createdPatient = await supabasePatientAdapter.registerPatient(payload)
+      const nextPatientId = createdPatient?.patient_id || patientData.patientId || null
+
+      const createdSession = await supabasePatientAdapter.createSession({
+        patient_id: nextPatientId,
+        chief_complaint: patientData.chiefComplaint || 'Registration completed',
+        complaint_category: 'General',
+        department: 'General Medicine',
+        language_used: payload.preferred_language,
+        consent_given: true,
+        status: 'in_progress'
+      })
+
+      onUpdateData({
+        patientId: nextPatientId,
+        sessionId: createdSession?.session_id || createdSession?.id || null,
+        fullName: payload.full_name,
+        age: payload.age,
+        gender: payload.gender,
+        mobile: payload.phone,
+        language: payload.preferred_language
+      })
+
       onNavigate(4)
+    } catch (error) {
+      console.error('Patient registration failed:', error)
+      setErrors((prev) => ({
+        ...prev,
+        submit: 'Unable to save patient record. Please try again.'
+      }))
     }
   }
 
@@ -142,12 +184,16 @@ function PatientInformation({ patientData, onNavigate, onUpdateData }) {
               <span className="error-message">{errors.mobile}</span>
             )}
           </div>
+
+          {errors.submit && (
+            <div className="error-message" style={{ marginTop: '12px' }}>{errors.submit}</div>
+          )}
         </div>
 
                 <div className="action-buttons">
           <button 
             className="back-button"
-            onClick={() => onNavigate(1)}
+            onClick={() => onNavigate(2)}
           >
             ← {t.patient.back}
           </button>

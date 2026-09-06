@@ -9,23 +9,7 @@ function Welcome({ onNavigate, onLanguageChange, onUpdateData, patientData }) {
   const t = translations[language]
   const [selectedLanguage, setSelectedLanguage] = useState(language)
 
-  const features = [
-    {
-      icon: Icons.Clock,
-      title: t.welcome.feature1,
-      desc: t.welcome.feature1Description
-    },
-    {
-      icon: Icons.Lock,
-      title: t.welcome.feature2,
-      desc: t.welcome.feature2Description
-    },
-    {
-      icon: Icons.Heart,
-      title: t.welcome.feature3,
-      desc: t.welcome.feature3Description
-    }
-  ]
+  
 
   const languages = [
     { id: 'en', label: t.language.english, flag: '🇺🇸' },
@@ -40,8 +24,7 @@ function Welcome({ onNavigate, onLanguageChange, onUpdateData, patientData }) {
   }
 
   const handleStartJourney = () => {
-    // Navigate directly to Patient Information (skip old language screen)
-    onNavigate(3)
+    onNavigate(2)
   }
 
   return (
@@ -61,18 +44,7 @@ function Welcome({ onNavigate, onLanguageChange, onUpdateData, patientData }) {
             <p className="welcome-description">{t.welcome.description}</p>
           </div>
 
-          {/* Features Grid */}
-          <div className="features-grid">
-            {features.map((feature, idx) => (
-              <div key={idx} className="feature-card">
-                <div className="feature-icon-wrapper">
-                  <feature.icon />
-                </div>
-                <h3 className="feature-title">{feature.title}</h3>
-                <p className="feature-desc">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
+          
 
           {/* Language Selection Section */}
           <div className="welcome-language-section">
