@@ -5,7 +5,14 @@ export const mockPatient = {
   age: "32",
   gender: "Male",
   mobile: "9876543210",
-  chiefComplaint: "Fever and headache since yesterday"
+  chiefComplaint: "Fever and headache since yesterday",
+  complaintTags: ["fever", "headache"],
+  assessmentAnswers: {
+    duration: "1-day",
+    temperature: "around-101",
+    symptoms: ["headache"],
+    seriousSymptoms: ["none"]
+  }
 };
 
 export const languages = [
@@ -32,6 +39,56 @@ export const doctorQueue = [
   { id: "MK-1046", name: "Arjun Verma", age: 46, gender: "Male", concern: "Chest discomfort", wait: "14 min", status: "Waiting", severity: "high", time: "10:10 AM" },
   { id: "MK-1045", name: "Sunita Rao", age: 61, gender: "Female", concern: "Joint pain and fatigue", wait: "Completed", status: "Completed", severity: "low", time: "09:54 AM" }
 ];
+
+export const patientSessionSeed = {
+  id: 'session_001',
+  patientId: 'patient_001',
+  doctorId: 'doctor_001',
+  status: 'submitted',
+  language: 'English',
+  createdAt: '2026-09-06T10:24:00Z',
+  updatedAt: '2026-09-06T10:26:00Z',
+  patient: {
+    fullName: 'Rahul Sharma',
+    age: 32,
+    gender: 'Male',
+    mobile: '9876543210'
+  },
+  chiefComplaint: 'Fever and headache since yesterday',
+  complaintTags: ['fever', 'headache'],
+  assessmentAnswers: {
+    duration: '1-day',
+    temperature: 'around-101',
+    symptoms: ['headache'],
+    seriousSymptoms: ['none']
+  },
+  medicalHistory: {
+    allergies: 'No known allergies reported',
+    currentMedication: 'Paracetamol 500 mg as needed',
+    surgeries: '',
+    familyHistory: ''
+  },
+  documents: [
+    {
+      id: 'doc_001',
+      name: 'Rahul_Sharma_intake.pdf',
+      type: 'pdf',
+      size: 248000,
+      status: 'processed'
+    }
+  ],
+  extracted: [
+    { label: 'Patient name', value: 'Rahul Sharma' },
+    { label: 'Primary concern', value: 'Fever and headache since yesterday' },
+    { label: 'Current medication', value: 'Paracetamol 500 mg, as needed' },
+    { label: 'Allergies', value: 'No known allergies reported' }
+  ],
+  aiSummary: {
+    overview: 'Rahul Sharma is a 32-year-old male presenting with fever and headache that began yesterday.',
+    keyFindings: ['Acute fever with headache', 'Symptoms began approximately 24 hours ago'],
+    suggestedChecks: ['Record current temperature', 'Assess hydration and other infection symptoms']
+  }
+};
 
 export const doctorActivity = [
   { title: "Patient intake completed", detail: "Rahul Sharma submitted symptoms", time: "2 min ago", tone: "teal" },

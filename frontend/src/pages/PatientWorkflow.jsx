@@ -479,12 +479,23 @@ function CompletionScreen({ patientData, workflowData, updateWorkflow, onNavigat
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const sessionId = patientData.sessionId || workflowData.sessionId
+        if (sessionId) {
+          await import('../modules/shared/services/supabaseAdapter').then(({ supabasePatientAdapter }) =>
+            supabasePatientAdapter.submitSession(sessionId)
+          )
+        }
+      } catch (error) {
+        console.warn('Session submission to backend failed:', error)
+      }
+
       setLoading(false)
-      updateWorkflow({ completedAt: new Date().toISOString() })
+      updateWorkflow({ completedAt: new Date().toISOString(), sessionId: patientData.sessionId || workflowData.sessionId })
     }, 650)
     return () => clearTimeout(timer)
-  }, [updateWorkflow])
+  }, [patientData.sessionId, updateWorkflow, workflowData.sessionId])
 
   return (
     <Layout screen={10} title={t.completion.stepTitle}>

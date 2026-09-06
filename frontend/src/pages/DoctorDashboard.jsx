@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icons } from '../components/Icons'
 import { doctorActivity, doctorQueue, mockClinicalRecord, mockDoctor } from '../data/mockData'
+import { getDoctorProfile, getDoctorQueueData } from '../modules/doctor/services/mockDoctorService'
 import './DoctorDashboard.css'
 
 const navItems = [
@@ -27,6 +28,7 @@ const availableAccounts = [
 
 function DoctorDashboard({ onLogout, onPatientAccess }) {
   const [activeView, setActiveView] = useState('overview')
+  const [queueItems, setQueueItems] = useState(doctorQueue)
   const [selectedPatient, setSelectedPatient] = useState(doctorQueue[0])
   const [openMenu, setOpenMenu] = useState(null)
   const [notifications, setNotifications] = useState(initialNotifications)
@@ -39,6 +41,21 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
   const [showNotesEditor, setShowNotesEditor] = useState(false)
   const [consultationPatient, setConsultationPatient] = useState(null)
   const headerActionsRef = useRef(null)
+
+  useEffect(() => {
+    async function loadDoctorWorkspaceData() {
+      try {
+        const [profile, queue] = await Promise.all([getDoctorProfile(), getDoctorQueueData()])
+        setDoctor(profile)
+        setQueueItems(queue)
+        setSelectedPatient((current) => current || queue[0] || doctorQueue[0])
+      } catch (error) {
+        console.warn('Doctor workspace data load failed:', error)
+      }
+    }
+
+    loadDoctorWorkspaceData()
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('medikiosk-doctor-profile', JSON.stringify(doctor))
@@ -113,8 +130,8 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
           </div>
         </header>
 
-        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} />}
-        {activeView === 'patients' && <PatientQueue selectedPatient={selectedPatient} onSelectPatient={setSelectedPatient} onOpenRecord={() => setActiveView('documents')} />}
+        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} queueItems={queueItems} />}
+        {activeView === 'patients' && <PatientQueue selectedPatient={selectedPatient} onSelectPatient={setSelectedPatient} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} />}
         {activeView === 'documents' && <OriginalDocuments onNext={() => setActiveView('extracted')} />}
         {activeView === 'extracted' && <ExtractedInformation fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => setActiveView('compare')} onBack={() => setActiveView('documents')} />}
         {activeView === 'compare' && <CompareInformation fields={extractedFields} hasComparison={selectedPatient.id === mockClinicalRecord.patientId} onNext={() => setActiveView('summary')} onBack={() => setActiveView('extracted')} onReviewField={() => { setReviewField('Current medication'); setActiveView('extracted') }} />}
@@ -158,11 +175,11 @@ function PageHeading({ eyebrow, title, description, action }) {
   return <div className="page-heading"><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action}</div>
 }
 
-function Overview({ onSelectPatient, onQueue }) {
+function Overview({ onSelectPatient, onQueue, queueItems }) {
   return <div className="workspace-content">
     <PageHeading eyebrow="MONDAY, 05 SEPTEMBER 2026" title="Good morning, Dr. Mehta" description="Here is what needs your attention today." action={<button className="primary-action" onClick={onQueue}><Icons.Users /> View patient queue</button>} />
-    <div className="metric-grid"><Metric label="Patients today" value="24" change="+12%" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value="3" change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="11 min" change="-8%" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value="18" change="75% of daily goal" icon={Icons.CheckCircle} tone="green" /></div>
-    <div className="workspace-columns"><section className="surface-card queue-card"><div className="card-heading"><div><h2>Patient queue</h2><p>Review intake details before consultation.</p></div><button className="quiet-button" onClick={onQueue}>View all <Icons.ChevronRight /></button></div><div className="queue-list">{doctorQueue.slice(0, 3).map((patient) => <QueueRow key={patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}</div></section><section className="surface-card activity-card"><div className="card-heading"><div><h2>Recent activity</h2><p>Updates from your workspace.</p></div><Icons.More /></div>{doctorActivity.map((item) => <div className="activity-row" key={item.title}><span className={`activity-dot ${item.tone}`} /><div><strong>{item.title}</strong><p>{item.detail}</p></div><time>{item.time}</time></div>)}</section></div>
+    <div className="metric-grid"><Metric label="Patients today" value="24" change="+12%" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value={String(queueItems.filter((patient) => patient.status !== 'Completed').length)} change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="11 min" change="-8%" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value={String(queueItems.filter((patient) => patient.status === 'Completed').length)} change="Daily goal" icon={Icons.CheckCircle} tone="green" /></div>
+    <div className="workspace-columns"><section className="surface-card queue-card"><div className="card-heading"><div><h2>Patient queue</h2><p>Review intake details before consultation.</p></div><button className="quiet-button" onClick={onQueue}>View all <Icons.ChevronRight /></button></div><div className="queue-list">{queueItems.slice(0, 3).map((patient) => <QueueRow key={patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}</div></section><section className="surface-card activity-card"><div className="card-heading"><div><h2>Recent activity</h2><p>Updates from your workspace.</p></div><Icons.More /></div>{doctorActivity.map((item) => <div className="activity-row" key={item.title}><span className={`activity-dot ${item.tone}`} /><div><strong>{item.title}</strong><p>{item.detail}</p></div><time>{item.time}</time></div>)}</section></div>
   </div>
 }
 
@@ -195,12 +212,12 @@ function LegacyPatientQueue({ selectedPatient, onSelectPatient, onOpenRecord }) 
 
 function LegacyPatientDetail({ patient, onOpenRecord }) { return <aside className="surface-card patient-detail"><div className="detail-top"><span className="large-avatar">{patient.name.split(' ').map((part) => part[0]).join('')}</span><div><h2>{patient.name}</h2><p>{patient.age} years · {patient.gender}</p></div><button className="icon-action"><Icons.More /></button></div><div className="detail-id"><span>INTAKE ID</span><strong>{patient.id}</strong></div><div className="detail-section"><span>PRIMARY CONCERN</span><strong>{patient.concern}</strong><p>Patient submitted this concern through the kiosk intake form.</p></div><div className="detail-section"><span>INTAKE DETAILS</span><div className="detail-line"><b>Arrival time</b><em>{patient.time}</em></div><div className="detail-line"><b>Wait time</b><em>{patient.wait}</em></div></div><button className="primary-action detail-action" onClick={onOpenRecord}><Icons.Clipboard /> Open patient record</button></aside> }
 
-function PatientQueue({ selectedPatient, onSelectPatient, onOpenRecord }) {
+function PatientQueue({ selectedPatient, onSelectPatient, onOpenRecord, queueItems }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const statuses = ['All', 'Ready', 'Waiting', 'Completed']
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredPatients = doctorQueue.filter((patient) => patient.name.toLowerCase().includes(normalizedQuery) && (statusFilter === 'All' || patient.status === statusFilter))
+  const filteredPatients = queueItems.filter((patient) => patient.name.toLowerCase().includes(normalizedQuery) && (statusFilter === 'All' || patient.status === statusFilter))
   const cycleFilter = () => setStatusFilter(statuses[(statuses.indexOf(statusFilter) + 1) % statuses.length])
   const exportPatients = () => downloadFile('medikiosk_patient_queue.txt', filteredPatients.map((patient) => `${patient.id} | ${patient.name} | ${patient.concern} | ${patient.status}`).join('\n'), 'text/plain;charset=utf-8')
 

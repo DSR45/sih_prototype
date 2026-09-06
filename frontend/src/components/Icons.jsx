@@ -123,6 +123,12 @@ export const Icons = {
     </svg>
   ),
 
+  Phone: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.86 19.86 0 0 1 3.08 4.18 2 2 0 0 1 5 2h3a2 2 0 0 1 2 1.72l.43 2.05a2 2 0 0 1-.47 1.76l-1.18 1.18a16 16 0 0 0 7.18 7.18l1.18-1.18a2 2 0 0 1 1.76-.47l2.05.43A2 2 0 0 1 22 16.92z"></path>
+    </svg>
+  ),
+
   Headache: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="8"></circle>

@@ -24,8 +24,7 @@ function Welcome({ onNavigate, onLanguageChange, onUpdateData, patientData }) {
   }
 
   const handleStartJourney = () => {
-    // Navigate directly to Patient Information (skip old language screen)
-    onNavigate(3)
+    onNavigate(2)
   }
 
   return (

@@ -19,7 +19,7 @@ function DoctorLogin({ onPatientAccess, onLogin }) {
     setNotice('')
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     if (!credentials.email || !credentials.password) {
       setError(t.errors.required)
@@ -27,8 +27,12 @@ function DoctorLogin({ onPatientAccess, onLogin }) {
     }
 
     setError('')
-    setNotice(t.signedIn)
-    onLogin()
+    setNotice('')
+    const result = await onLogin(credentials)
+
+    if (result !== false) {
+      setNotice(t.signedIn)
+    }
   }
 
   const handleForgotPassword = () => {
