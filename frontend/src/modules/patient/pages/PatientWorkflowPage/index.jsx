@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
+import { uploadDocument, deleteDocument } from '@shared/services/api/documentService'
 import './styles.css'
 
 export function getInitialWorkflow() {
@@ -92,7 +93,7 @@ function ActionBar({ onBack, onPrimary, primaryLabel, secondaryLabel, onSecondar
   )
 }
 
-function DocumentsScreen({ workflowData, updateWorkflow, onNavigate }) {
+function DocumentsScreen({ patientData, workflowData, updateWorkflow, onNavigate }) {
   console.log('DocumentsScreen rendering')
   const { language } = useLanguage()
   console.log('DocumentsScreen language:', language)
@@ -119,29 +120,44 @@ function DocumentsScreen({ workflowData, updateWorkflow, onNavigate }) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
 
-  const addFiles = (fileList) => {
-    const files = [...fileList].filter(file => /^(application\/pdf|image\/(jpeg|png))$/.test(file.type))
-    if (!files.length) return
-    
-    setUploading(true)
-    setProgress(15)
-    const timer = setInterval(() => setProgress(value => Math.min(value + 25, 100)), 120)
-    
-    setTimeout(() => {
-      clearInterval(timer)
-      setDocuments(current => [
-        ...current,
-        ...files.map(file => ({
-          id: `${file.name}-${file.lastModified}-${Math.random()}`,
-          name: file.name,
-          type: file.type,
-          size: file.size
-        }))
-      ])
-      setUploading(false)
-      setProgress(100)
-    }, 520)
-  }
+  const addFiles = async (fileList) => {
+      const files = [...fileList].filter(file => /^(application\/pdf|image\/(jpeg|png))$/.test(file.type))
+      if (!files.length) return
+
+      if (!patientData?.sessionId) {
+        console.error('No session ID available for document upload')
+        return
+      }
+
+      setUploading(true)
+      setProgress(10)
+
+      try {
+        const uploadedDocuments = []
+
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index]
+          const documentType = file.type === 'application/pdf' ? 'Prescription' : 'Lab Report'
+          const uploaded = await uploadDocument(patientData.sessionId, file, documentType)
+
+          uploadedDocuments.push({
+            ...uploaded,
+            id: uploaded.document_id,
+            name: file.name,
+            type: file.type,
+            size: file.size
+          })
+
+          setProgress(Math.round(((index + 1) / files.length) * 100))
+        }
+
+        setDocuments(current => [...current, ...uploadedDocuments])
+      } catch (error) {
+        console.error('Document upload failed:', error)
+      } finally {
+        setUploading(false)
+      }
+    }
 
   const continueToSummary = () => {
     updateWorkflow({ documents })

@@ -54,11 +54,25 @@ export function usePatientFlow() {
     }))
   }, [])
 
-  const handleUpdateWorkflow = useCallback((updates) => {
+    const handleUpdateWorkflow = useCallback((updates) => {
     setWorkflowData(prev => ({
       ...prev,
       ...updates
     }))
+  }, [])
+
+  const handleResetSession = useCallback(() => {
+    // Clear only session-specific data, keep patient identity
+    setPatientData(prev => ({
+      ...prev,
+      sessionId: undefined,
+      chiefComplaint: '',
+      complaintCategory: '',
+      complaintTags: [],
+      assessmentAnswers: {}
+    }))
+    setWorkflowData(getInitialWorkflow())
+    console.log('✅ Session data reset')
   }, [])
 
   useEffect(() => {
@@ -82,6 +96,7 @@ export function usePatientFlow() {
     handleLanguageChange,
     handleUpdateData,
     handleUpdateWorkflow,
+    handleResetSession,
     setUserType
   }
 }

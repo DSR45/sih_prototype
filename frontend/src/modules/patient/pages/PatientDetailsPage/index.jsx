@@ -2,15 +2,47 @@ import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
 import { PATIENT_FLOW } from '@shared/constants'
+import { supabasePatientAdapter } from '@shared/services/supabaseAdapter'
 import './styles.css'
 
-function PatientDetails({ patientData, onNavigate, onUpdateData }) {
+function PatientDetails({ patientData, onNavigate, onUpdateData, onUpdateWorkflow }) {
   const { language } = useLanguage()
   const t = translations[language]
 
-  const handleStartNewCase = () => {
-    // Navigate to chief complaint screen
-    onNavigate(PATIENT_FLOW.CHIEF_COMPLAINT)
+    const handleStartNewCase = async () => {
+    try {
+      const preferredLanguage = patientData.language || 'English'
+      const session = await supabasePatientAdapter.createSession({
+        patient_id: patientData.patientId,
+        department: 'General Medicine',
+        language_used: preferredLanguage,
+        chief_complaint: 'Initial consultation',
+        complaint_category: 'General',
+        consent_given: true,
+        status: 'in_progress'
+      })
+
+      const sessionId = session?.session_id || session?.id
+      if (!sessionId) throw new Error('Session was created without a session ID')
+
+            onUpdateData({
+        sessionId,
+        chiefComplaint: '',
+        complaintCategory: '',
+        complaintTags: [],
+        assessmentAnswers: {}
+      })
+      onUpdateWorkflow?.({
+        documents: [],
+        assessmentComplete: false,
+        carePath: '',
+        completedAt: '',
+        sessionId
+      })
+      onNavigate(PATIENT_FLOW.CHIEF_COMPLAINT)
+    } catch (error) {
+      console.error('Failed to create new patient session:', error)
+    }
   }
 
   const handleLogout = () => {

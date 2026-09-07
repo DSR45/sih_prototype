@@ -83,14 +83,19 @@ function PatientInformation({ patientData, onNavigate, onUpdateData }) {
         status: 'in_progress'
       })
 
-      onUpdateData({
+            onUpdateData({
         patientId: nextPatientId,
         sessionId: createdSession?.session_id || createdSession?.id || null,
         fullName: payload.full_name,
         age: payload.age,
         gender: payload.gender,
         mobile: payload.phone,
-        language: payload.preferred_language
+        language: payload.preferred_language,
+        // Clear old session data
+        chiefComplaint: '',
+        complaintCategory: '',
+        complaintTags: [],
+        assessmentAnswers: {}
       })
 
       onNavigate(4)

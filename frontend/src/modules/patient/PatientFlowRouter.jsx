@@ -41,10 +41,11 @@ function PatientFlowRouter({
     case PATIENT_FLOW.PATIENT_DETAILS:
       return (
         <PatientDetails
-          patientData={patientData}
-          onNavigate={onNavigate}
-          onUpdateData={onUpdateData}
-        />
+                  patientData={patientData}
+                  onNavigate={onNavigate}
+                  onUpdateData={onUpdateData}
+                  onUpdateWorkflow={onUpdateWorkflow}
+                />
       )
     case PATIENT_FLOW.PATIENT_INFO:
       return (

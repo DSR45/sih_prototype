@@ -5,6 +5,8 @@ import { Icons } from '@shared/components/Icons'
 import ScreenShell from '@shared/components/Layout/ScreenShell'
 import StepNavigation from '@shared/components/Navigation/StepNavigation'
 import { PATIENT_FLOW } from '@shared/constants'
+import { updateChiefComplaint } from '@shared/services/api/sessionService'
+import { saveQuestionResponse } from '@shared/services/api/questionService'
 import './styles.css'
 
 function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
@@ -12,6 +14,8 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
   const t = translations[language]
   const [selectedSymptoms, setSelectedSymptoms] = useState(patientData.complaintTags || [])
   const [isListening, setIsListening] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const commonSymptoms = [
     { id: 'fever', label: t.complaint.symptoms.fever, icon: Icons.Thermometer },
@@ -37,8 +41,73 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
     // Voice recognition implementation would go here
   }
 
-  const handleUpdateComplaint = (value) => {
+    const handleUpdateComplaint = (value) => {
     onUpdateData({ chiefComplaint: value })
+  }
+
+  const handleContinue = async () => {
+    // Validate chief complaint
+    if (!patientData.chiefComplaint || patientData.chiefComplaint.trim() === '') {
+      setError(t.complaint.errors?.complaintRequired || 'Please describe your problem')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      // Determine complaint category based on selected symptoms or complaint text
+      let category = 'General'
+      const complaint = patientData.chiefComplaint.toLowerCase()
+      
+      if (selectedSymptoms.includes('fever') || complaint.includes('fever')) {
+        category = 'Fever'
+      } else if (selectedSymptoms.includes('headache') || complaint.includes('headache')) {
+        category = 'Headache'
+      } else if (selectedSymptoms.includes('cough') || complaint.includes('cough')) {
+        category = 'Cough'
+      } else if (selectedSymptoms.includes('stomach') || complaint.includes('stomach') || complaint.includes('abdominal')) {
+        category = 'Abdominal Pain'
+      } else if (selectedSymptoms.includes('weakness')) {
+        category = 'General Weakness'
+      }
+
+      // Update session with chief complaint
+      if (patientData.sessionId) {
+        await updateChiefComplaint(
+          patientData.sessionId,
+          patientData.chiefComplaint,
+          category
+        )
+
+        // Save selected symptoms as question responses
+        if (selectedSymptoms.length > 0) {
+          await saveQuestionResponse(
+            patientData.sessionId,
+            'Selected symptoms',
+            selectedSymptoms.join(', '),
+            'Chief Complaint'
+          )
+        }
+
+        console.log('✅ Chief complaint saved to backend')
+      }
+
+      // Update local state
+      onUpdateData({ 
+        chiefComplaint: patientData.chiefComplaint,
+        complaintCategory: category,
+        complaintTags: selectedSymptoms 
+      })
+
+      // Navigate to next screen
+      onNavigate(PATIENT_FLOW.SYMPTOM_ASSESSMENT)
+    } catch (err) {
+      console.error('❌ Error saving chief complaint:', err)
+      setError('Failed to save. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -98,22 +167,29 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
             </div>
           </div>
 
-          <div className="privacy-notice">
+                    <div className="privacy-notice">
             <span className="privacy-icon"><Icons.Lock /></span>
             <div className="privacy-text">
               <span className="privacy-label">{t.complaint.privateSecure}</span>
               <span className="privacy-description">{t.complaint.privacyDescription}</span>
             </div>
           </div>
+
+          {error && (
+            <div className="error-message" style={{ marginTop: '10px', padding: '4px 0', color: '#c00', fontSize: '12px', lineHeight: '1.4' }}>
+                          {error}
+                        </div>
+          )}
         </div>
 
       <StepNavigation
         onBack={() => onNavigate(PATIENT_FLOW.PATIENT_INFO)}
-        onContinue={() => onNavigate(PATIENT_FLOW.SYMPTOM_ASSESSMENT)}
+        onContinue={handleContinue}
         backLabel={t.complaint.back}
-        continueLabel={t.complaint.continue}
+        continueLabel={saving ? 'Saving...' : t.complaint.continue}
         currentStep={1}
         totalSteps={4}
+        disabled={saving}
       />
     </ScreenShell>
   )

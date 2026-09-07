@@ -28,15 +28,24 @@ function PatientLogin({ patientData, onNavigate, onUpdateData }) {
       const patient = await supabasePatientAdapter.getPatientByPhone(sanitized)
 
       if (patient) {
-        onUpdateData({
-          patientId: patient.patient_id,
-          fullName: patient.full_name,
-          age: patient.age,
-          gender: patient.gender,
-          mobile: patient.phone,
-          language: patient.preferred_language || patientData.language || 'English'
-        })
-        onNavigate(PATIENT_FLOW.PATIENT_DETAILS)
+              const preferredLanguage = patient.preferred_language || patientData.language || 'English'
+
+              // A session is created later when the patient clicks “Start New Case”.
+
+              onUpdateData({
+                patientId: patient.patient_id,
+                sessionId: '',
+                fullName: patient.full_name,
+                age: patient.age,
+                gender: patient.gender,
+                mobile: patient.phone,
+                language: preferredLanguage,
+                chiefComplaint: '',
+                complaintCategory: '',
+                complaintTags: [],
+                assessmentAnswers: {}
+              })
+              onNavigate(PATIENT_FLOW.PATIENT_DETAILS)
       } else {
         setError(t.login?.notFound || 'No record found for this number.')
       }

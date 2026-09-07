@@ -3,6 +3,7 @@ import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
 import { isPilesComplaint } from '../PatientWorkflowPage'
+import { saveQuestionResponse } from '@shared/services/api/questionService'
 import './styles.css'
 
 function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
@@ -121,9 +122,11 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
     }
   ]
 
-  const questions = pilesCase ? pilesQuestions : feverQuestions
+    const questions = pilesCase ? pilesQuestions : feverQuestions
   const [questionIndex, setQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState(patientData.assessmentAnswers || {})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const currentQuestion = questions[questionIndex]
   const selected = currentQuestion?.multi ? (answers[currentQuestion.id] || []) : (answers[currentQuestion?.id] ? [answers[currentQuestion.id]] : [])
   const complete = questionIndex >= questions.length
@@ -138,15 +141,41 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
       setAnswers(previous => ({ ...previous, [currentQuestion.id]: value })) 
   }
 
-  const continueQuestion = () => { 
+    const continueQuestion = async () => { 
       if (!selected.length) return
     
-      // Save answers before moving to next question or completion
-      const updatedAnswers = { ...answers }
-      onUpdateData({ assessmentAnswers: updatedAnswers })
-    
-      // Move to next question or mark complete
-      setQuestionIndex(index => index + 1) 
+      setSaving(true)
+      setError('')
+
+      try {
+        // Save current answer to backend
+        if (patientData.sessionId) {
+          const answerValue = currentQuestion.multi 
+            ? selected.join(', ') 
+            : selected[0]
+
+          await saveQuestionResponse(
+            patientData.sessionId,
+            currentQuestion.question,
+            answerValue,
+            'Symptom Assessment'
+          )
+
+          console.log(`✅ Saved answer for question: ${currentQuestion.id}`)
+        }
+
+        // Save answers to local state
+        const updatedAnswers = { ...answers }
+        onUpdateData({ assessmentAnswers: updatedAnswers })
+      
+        // Move to next question or mark complete
+        setQuestionIndex(index => index + 1)
+      } catch (err) {
+        console.error('❌ Error saving answer:', err)
+        setError('Failed to save answer. Please try again.')
+      } finally {
+        setSaving(false)
+      }
     }
 
   if (complete) {
@@ -203,12 +232,13 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
             <p className="question-description">{currentQuestion.description}</p>
           )}
           
-          <div className="options-list">
+                    <div className="options-list">
             {currentQuestion.options.map(([label, value]) => (
               <button 
                 key={value} 
                 className={`option-button ${selected.includes(value) ? 'selected' : ''}`} 
                 onClick={() => selectOption(value)}
+                disabled={saving}
               >
                 <span className="option-radio">
                   {selected.includes(value) && <span className="option-radio-dot" />}
@@ -217,6 +247,12 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
               </button>
             ))}
           </div>
+
+          {error && (
+            <div className="error-message" style={{ marginTop: '16px', padding: '12px', backgroundColor: '#fee', border: '1px solid #fcc', borderRadius: '8px', color: '#c00' }}>
+              <Icons.AlertCircle /> {error}
+            </div>
+          )}
         </div>
         
         <div className="action-buttons">
@@ -234,12 +270,19 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
               />
             ))}
           </div>
-          <button 
-            className={`continue-button ${!selected.length ? 'disabled' : ''}`} 
-            disabled={!selected.length} 
+                    <button 
+            className={`continue-button ${!selected.length || saving ? 'disabled' : ''}`} 
+            disabled={!selected.length || saving} 
             onClick={continueQuestion}
           >
-            {questionIndex === questions.length - 1 ? t.assessment.finish : t.assessment.continue} →
+            {saving ? (
+              <>
+                <Icons.Loader className="animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>{questionIndex === questions.length - 1 ? t.assessment.finish : t.assessment.continue} →</>
+            )}
           </button>
         </div>
       </div>
