@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist'
 import { Icons } from '@shared/components/Icons'
 import { supabaseDoctorAdapter, supabasePatientAdapter } from '@shared/services/supabaseAdapter'
 import './styles.css'
+
+GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: Icons.LayoutDashboard },
@@ -102,6 +105,26 @@ function normalizeMedicines(document, medicineRows) {
   })).filter((medicine) => medicine.medicine_name) : []
 }
 
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown'
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
+function getDocumentType(document, blob) {
+  const contentType = blob.type?.toLowerCase()
+  if (contentType === 'application/pdf') return 'PDF'
+  if (contentType === 'image/png') return 'PNG image'
+  if (contentType === 'image/jpeg' || contentType === 'image/jpg') return 'JPG image'
+
+  const filePath = document?.file_url?.split('?')[0] || ''
+  const extension = filePath.split('.').pop()?.toLowerCase()
+  if (extension === 'pdf') return 'PDF'
+  if (extension === 'png') return 'PNG image'
+  if (extension === 'jpg' || extension === 'jpeg') return 'JPG image'
+  return document?.document_type || 'Document'
+}
+
 function getPatientFieldValue(field, patient, sessionDetails) {
   const label = field.label.toLowerCase()
   const session = sessionDetails?.session || {}
@@ -113,6 +136,33 @@ function getPatientFieldValue(field, patient, sessionDetails) {
   if (label === 'gender') return patient?.gender
 
   return undefined
+}
+
+function groupQueueByPatient(queue) {
+  const grouped = new Map()
+
+  queue.forEach((session) => {
+    const patientId = session.patientId || session.patient_id || session.id
+    if (!patientId) return
+
+    const sessions = grouped.get(patientId) || []
+    sessions.push(session)
+    grouped.set(patientId, sessions)
+  })
+
+  return [...grouped.entries()].map(([patientId, sessions]) => {
+    const sortedSessions = sessions.sort((first, second) => (
+      new Date(second.visit_date || 0).getTime() - new Date(first.visit_date || 0).getTime()
+    ))
+    const latestSession = sortedSessions[0]
+
+    return {
+      ...latestSession,
+      patientId,
+      sessions: sortedSessions,
+      visitCount: sortedSessions.length
+    }
+  })
 }
 
 function DoctorDashboard({ onLogout, onPatientAccess }) {
@@ -143,8 +193,9 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
           supabaseDoctorAdapter.getQueue()
         ])
         setDoctor(profile)
-        setQueueItems(queue)
-        setSelectedPatient(queue[0] || null)
+        const groupedQueue = groupQueueByPatient(queue)
+        setQueueItems(groupedQueue)
+        setSelectedPatient(groupedQueue[0] || null)
       } catch (error) {
         console.warn('Doctor workspace data load failed:', error)
       }
@@ -260,9 +311,25 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
     generatedAt: sessionDetails?.session?.created_at ? new Date(sessionDetails.session.created_at).toLocaleString() : 'Available now'
   }
 
+  const activePatientCount = new Set(
+    queueItems
+      .filter((patient) => !['completed', 'reviewed'].includes(String(patient.status).toLowerCase()))
+      .map((patient) => patient.patientId || patient.id)
+      .filter(Boolean)
+  ).size
+
   const selectPatient = (patient) => {
     setSelectedPatient(patient)
     setActiveView('patients')
+  }
+
+  const selectSession = (session, patient) => {
+    setSelectedPatient({
+      ...session,
+      patientId: patient.patientId,
+      sessions: patient.sessions,
+      visitCount: patient.visitCount
+    })
   }
 
   return (
@@ -274,7 +341,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
           <p>WORKSPACE</p>
           {navItems.map(({ id, label, icon: Icon }) => (
             <button key={id} className={activeView === id ? 'active' : ''} onClick={() => setActiveView(id)}>
-              <Icon /><span>{label}</span>{id === 'patients' && <b>3</b>}
+              <Icon /><span>{label}</span>{id === 'patients' && <b>{activePatientCount}</b>}
             </button>
           ))}
         </nav>
@@ -301,7 +368,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
         </header>
 
         {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} queueItems={queueItems} activityItems={queueItems.slice(0, 3)} />}
-        {activeView === 'patients' && (<PatientQueue selectedPatient={selectedPatient} onSelectPatient={setSelectedPatient} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} questionResponses={questionResponses}/>)}
+        {activeView === 'patients' && (<PatientQueue selectedPatient={selectedPatient} onSelectPatient={selectPatient} onSelectSession={selectSession} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} questionResponses={questionResponses}/>)}
         {activeView === 'documents' && (
   <OriginalDocuments
     patient={selectedPatient}
@@ -352,15 +419,50 @@ function PageHeading({ eyebrow, title, description, action }) {
 }
 
 function Overview({ onSelectPatient, onQueue, queueItems, activityItems }) {
+  const today = new Date()
+  const patientSessions = new Map()
+
+  queueItems.forEach((patient) => {
+    const sessions = patient.sessions || [patient]
+    sessions.forEach((session) => {
+      const patientId = patient.patientId || patient.id
+      if (!patientId) return
+
+      const patientSessionList = patientSessions.get(patientId) || []
+      patientSessionList.push(session)
+      patientSessions.set(patientId, patientSessionList)
+    })
+  })
+
+  const isToday = (visitDate) => {
+    if (!visitDate) return false
+    const date = new Date(visitDate)
+    return !Number.isNaN(date.getTime()) &&
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+  }
+
+  const latestSessionFor = (sessions) => sessions.reduce((latest, session) => {
+    if (!latest) return session
+    return new Date(session.visit_date || 0) > new Date(latest.visit_date || 0) ? session : latest
+  }, null)
+
+  const patientsToday = [...patientSessions.values()]
+    .filter((sessions) => sessions.some((session) => isToday(session.visit_date))).length
+  const waitingNow = [...patientSessions.values()]
+    .map(latestSessionFor)
+    .filter((session) => !['completed', 'reviewed'].includes(String(session?.status).toLowerCase())).length
+
   return <div className="workspace-content">
     <PageHeading eyebrow="DOCTOR WORKSPACE" title="Patient overview" description="Review submitted patient intakes and continue their clinical review." action={<button className="primary-action" onClick={onQueue}><Icons.Users /> View patient queue</button>} />
-    <div className="metric-grid"><Metric label="Patients today" value={String(queueItems.length)} change="Submitted intakes" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value={String(queueItems.filter((patient) => patient.status !== 'Completed').length)} change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="-" change="Live queue" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value={String(queueItems.filter((patient) => patient.status === 'Completed').length)} change="Reviewed records" icon={Icons.CheckCircle} tone="green" /></div>
+    <div className="metric-grid"><Metric label="Patients today" value={String(patientsToday)} change="Submitted intakes" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value={String(waitingNow)} change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="-" change="Live queue" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value={String(queueItems.filter((patient) => ['completed', 'reviewed'].includes(String(patient.status).toLowerCase())).length)} change="Reviewed records" icon={Icons.CheckCircle} tone="green" /></div>
     <div className="workspace-columns"><section className="surface-card queue-card"><div className="card-heading"><div><h2>Patient queue</h2><p>Review intake details before consultation.</p></div><button className="quiet-button" onClick={onQueue}>View all <Icons.ChevronRight /></button></div><div className="queue-list">{queueItems.slice(0, 3).map((patient) => <QueueRow key={patient.sessionId || patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}</div></section><section className="surface-card activity-card"><div className="card-heading"><div><h2>Recent patients</h2><p>Latest submitted records.</p></div><Icons.More /></div>{activityItems.map((item) => <div className="activity-row" key={item.sessionId || item.id}><span className={`activity-dot ${item.status === 'Completed' ? 'green' : 'teal'}`} /><div><strong>{item.name}</strong><p>{item.concern}</p></div><time>{item.time}</time></div>)}</section></div>
   </div>
 }
 
 function Metric({ label, value, change, icon: Icon, tone }) { return <div className="metric-card"><span className={`metric-icon ${tone}`}><Icon /></span><p>{label}</p><strong>{value}</strong><small className={tone === 'orange' ? 'attention' : ''}>{change}</small></div> }
-function QueueRow({ patient, onClick }) { return <button className="queue-row" onClick={onClick}><span className="patient-avatar">{patient.name.split(' ').map((part) => part[0]).join('')}</span><span className="patient-summary"><strong>{patient.name}</strong><small>{patient.age} yrs · {patient.gender} · {patient.id}</small></span><span className="patient-concern">{patient.concern}</span><span className={`queue-status ${patient.status.toLowerCase()}`}>{patient.status}</span></button> }
+function QueueRow({ patient, onClick }) { return <button className="queue-row" onClick={onClick}><span className="patient-avatar">{patient.name.split(' ').map((part) => part[0]).join('')}</span><span className="patient-summary"><strong>{patient.name}</strong><small>{patient.age} yrs · {patient.gender} · {patient.id} · {patient.visitCount || 1} visits</small></span><span className="patient-concern">{patient.concern}</span><span className="patient-arrival">{patient.time || '--'}</span><span className={`queue-status ${patient.status.toLowerCase()}`}>{patient.status}</span></button> }
 
 function downloadFile(filename, content, mimeType) {
   const file = new Blob([content], { type: mimeType })
@@ -439,6 +541,7 @@ function LegacyPatientDetail({ patient, onOpenRecord }) { return <aside classNam
 function PatientQueue({
   selectedPatient,
   onSelectPatient,
+  onSelectSession,
   onOpenRecord,
   queueItems,
   questionResponses
@@ -532,6 +635,7 @@ function PatientQueue({
         <PatientDetail
           patient={selectedPatient}
           onOpenRecord={onOpenRecord}
+          onSelectSession={onSelectSession}
           questionResponses={questionResponses}
         />
       </div>
@@ -539,7 +643,7 @@ function PatientQueue({
   )
 }
 
-function PatientDetail({ patient, onOpenRecord, questionResponses = [] }) {
+function PatientDetail({ patient, onOpenRecord, onSelectSession, questionResponses = [] }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -604,6 +708,21 @@ function PatientDetail({ patient, onOpenRecord, questionResponses = [] }) {
       </div>
 
       <div className="detail-section">
+        <span>VISIT HISTORY</span>
+        {patient.sessions?.length ? patient.sessions.map((session, index) => (
+          <button
+            type="button"
+            className="detail-line visit-history-row"
+            key={session.sessionId}
+            onClick={() => onSelectSession(session, patient)}
+          >
+            <b>Visit #{patient.sessions.length - index}</b>
+            <em>{session.visit_date ? new Date(session.visit_date).toLocaleDateString() : '--'}</em>
+          </button>
+        )) : <p>No visit history available.</p>}
+      </div>
+
+      <div className="detail-section">
         <span>PATIENT RESPONSES</span>
 
         {questionResponses.length ? (
@@ -642,7 +761,59 @@ function LegacyOriginalDocumentScreen({ onNext }) {
 
 function OriginalDocuments({ patient, documents = [], onNext }) {
   const recordDocument = documents[0]
-  const documentName = recordDocument?.document_type || 'Patient document'
+  const [metadata, setMetadata] = useState({ status: 'idle', type: '', size: '', pages: null, previewUrl: '' })
+
+  useEffect(() => {
+    if (!recordDocument?.file_url) {
+      setMetadata({ status: 'idle', type: '', size: '', pages: null, previewUrl: '' })
+      return undefined
+    }
+
+    let cancelled = false
+    let objectUrl = ''
+    setMetadata({ status: 'loading', type: '', size: '', pages: null, previewUrl: '' })
+
+    async function loadMetadata() {
+      try {
+        const response = await fetch(recordDocument.file_url)
+        if (!response.ok) throw new Error(`Document download failed: ${response.status}`)
+
+        const blob = await response.blob()
+        const type = getDocumentType(recordDocument, blob)
+        const isPdf = type === 'PDF'
+        const isImage = type === 'PNG image' || type === 'JPG image'
+        let pages = isImage ? 1 : null
+
+        if (isPdf) {
+          const buffer = await blob.arrayBuffer()
+          const pdf = await getDocument({ data: buffer }).promise
+          pages = pdf.numPages
+        }
+
+        objectUrl = URL.createObjectURL(blob)
+        if (!cancelled) {
+          setMetadata({
+            status: 'ready',
+            type,
+            size: formatFileSize(blob.size),
+            pages,
+            previewUrl: objectUrl
+          })
+        }
+      } catch (error) {
+        if (!cancelled) setMetadata((current) => ({ ...current, status: 'error' }))
+        console.warn("Couldn't calculate document metadata:", error)
+      }
+    }
+
+    loadMetadata()
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [recordDocument?.document_id, recordDocument?.file_url])
+
+  const documentName = metadata.type || recordDocument?.document_type || 'Patient document'
 
   const handleDownload = () => {
     if (!recordDocument) return
@@ -691,15 +862,17 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
           </div>
 
           <div className="document-sheet">
-  {recordDocument?.file_url ? (
+          {metadata.previewUrl ? (
     <iframe
-      src={recordDocument.file_url}
+      src={metadata.previewUrl}
       width="100%"
       height="500"
       title="Patient Document"
       style={{ border: "none", borderRadius: "12px" }}
     />
-  ) : (
+          ) : metadata.status === 'loading' ? (
+            <p>Loading document...</p>
+          ) : (
     <p>No document found.</p>
   )}
 </div>
@@ -725,17 +898,17 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
 
           <div className="meta-row">
             <span>Document type</span>
-            <strong>{recordDocument?.document_type || 'Patient document'}</strong>
+            <strong>{metadata.status === 'loading' ? 'Calculating...' : documentName}</strong>
           </div>
 
           <div className="meta-row">
             <span>Pages</span>
-            <strong>{recordDocument?.page_count || 'Unknown'} pages</strong>
+            <strong>{metadata.status === 'loading' ? 'Calculating...' : metadata.pages ? `${metadata.pages} ${metadata.pages === 1 ? 'page' : 'pages'}` : 'Unknown'}</strong>
           </div>
 
           <div className="meta-row">
             <span>File size</span>
-            <strong>{recordDocument?.file_size || 'Unknown'}</strong>
+            <strong>{metadata.status === 'loading' ? 'Calculating...' : metadata.size || 'Unknown'}</strong>
           </div>
 
           <div className="meta-row">

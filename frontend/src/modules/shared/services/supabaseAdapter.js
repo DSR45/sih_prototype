@@ -22,6 +22,14 @@ const mockDoctorProfile = {
   email: 'doctor@medikiosk.local'
 }
 
+function formatQueueTime(visitDate) {
+  if (!visitDate) return '--'
+  const date = new Date(visitDate)
+  return Number.isNaN(date.getTime())
+    ? '--'
+    : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 async function fallbackToMock(operation, fallbackValue) {
   if (operation) {
     try {
@@ -89,6 +97,7 @@ export const supabaseDoctorAdapter = {
   async getQueue() {
     const sessions = await doctorService.getSubmittedSessions()
     return sessions.map(item => ({
+      ...item,
       id: item.patient_id,
       name: item.patients?.full_name || 'Patient',
       age: item.patients?.age,
@@ -96,8 +105,8 @@ export const supabaseDoctorAdapter = {
       concern: item.chief_complaint || 'General review',
       status: item.status === 'reviewed' ? 'Completed' : 'Ready',
       sessionId: item.session_id,
-      wait: item.visit_date ? new Date(item.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending',
-      time: item.visit_date ? new Date(item.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending',
+      wait: formatQueueTime(item.visit_date),
+      time: formatQueueTime(item.visit_date),
       severity: item.red_flag ? 'high' : 'moderate'
     }))
   },
