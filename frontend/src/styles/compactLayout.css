@@ -1,0 +1,490 @@
+/*Compact Layout Optimization - Fits all content on screen*/
+
+/* Reduce header height */
+.header {
+  padding: 6px 16px !important;
+}
+
+.logo {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.logo-icon {
+  font-size: 16px !important;
+}
+
+.logo-title {
+  font-size: 14px !important;
+}
+
+.logo-subtitle {
+  font-size: 9px !important;
+}
+
+/* Reduce progress bar height */
+.progress-section {
+  padding: 6px 16px !important;
+  top: 58px !important;
+  
+}
+
+.progress-header {
+  margin-bottom: 6px !important;
+}
+
+.step-badge {
+  padding: 2px 8px !important;
+  font-size: 10px !important;
+}
+
+.step-title {
+  font-size: 13px !important;
+}
+
+.percentage {
+  font-size: 11px !important;
+}
+
+.progress-bar-background {
+  height: 4px !important;
+}
+
+.progress-bar-wrapper {
+  margin-bottom: 6px !important;
+}
+
+.step-dot {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+.step-dot.current {
+  width: 7px !important;
+  height: 7px !important;
+}
+
+/* Optimize main content area */
+.scrollable-content {
+  padding-top: 100px !important; /* header 46px + progress 54px */
+  min-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.content-wrapper {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  padding: 12px 16px !important;
+  width: 100% !important;
+}
+
+/* Reduce section header spacing */
+.section-header {
+  margin-bottom: 12px !important;
+}
+
+.section-title {
+  font-size: 20px !important;
+  margin-bottom: 4px !important;
+}
+
+.section-subtitle {
+  font-size: 13px !important;
+  margin-bottom: 0 !important;
+}
+
+/* Reduce form section spacing */
+.form-section {
+  padding: 16px !important;
+  margin-bottom: 16px !important;
+  border-radius: 10px !important;
+}
+
+.form-group {
+  margin-bottom: 14px !important;
+  gap: 6px !important;
+}
+
+.form-label {
+  font-size: 13px !important;
+  margin-bottom: 0 !important;
+}
+
+.form-input {
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+}
+
+.gender-options {
+  padding: 10px !important;
+  gap: 10px !important;
+}
+
+.gender-button {
+  padding: 10px 6px !important;
+  font-size: 12px !important;
+}
+
+.gender-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Reduce action button spacing */
+.action-buttons {
+  margin-top: 16px !important;
+  padding-bottom: 16px !important;
+  gap: 12px !important;
+}
+
+.back-button,
+.continue-button {
+  padding: 9px 18px !important;
+  font-size: 13px !important;
+}
+
+/* Chief Complaint specific */
+.chief-complaint-container {
+  padding-top: 94px !important;
+}
+
+.complaint-content {
+  padding: 12px 16px !important;
+}
+
+.complaint-header {
+  margin-bottom: 12px !important;
+}
+
+.complaint-title {
+  font-size: 20px !important;
+  margin-bottom: 4px !important;
+}
+
+.complaint-subtitle {
+  font-size: 13px !important;
+}
+
+.voice-input-section,
+.text-input-section {
+  margin-bottom: 16px !important;
+}
+
+.voice-button {
+  padding: 14px !important;
+}
+
+.text-input {
+  min-height: 80px !important;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+}
+
+.helper-text {
+  font-size: 12px !important;
+  margin-top: 6px !important;
+}
+
+.common-symptoms {
+  margin-top: 16px !important;
+}
+
+.symptoms-label {
+  font-size: 11px !important;
+  margin-bottom: 10px !important;
+}
+
+.symptoms-grid {
+  gap: 8px !important;
+}
+
+.symptom-button {
+  padding: 10px 12px !important;
+  font-size: 12px !important;
+}
+
+.symptom-icon {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Privacy note */
+.privacy-note {
+  padding: 10px 12px !important;
+  margin-top: 16px !important;
+  font-size: 12px !important;
+}
+
+/* Symptom Assessment specific */
+.assessment-container {
+  padding-top: 94px !important;
+}
+
+.assessment-content {
+  padding: 12px 16px !important;
+}
+
+.question-card {
+  padding: 16px !important;
+  margin-bottom: 16px !important;
+}
+
+.question-text {
+  font-size: 16px !important;
+  margin-bottom: 12px !important;
+}
+
+.options-grid {
+  gap: 10px !important;
+}
+
+.option-button {
+  padding: 12px 14px !important;
+  font-size: 13px !important;
+}
+
+/* Patient Details specific */
+.patient-details-container {
+  padding: 12px !important;
+}
+
+.details-header {
+  padding: 20px 20px !important;
+}
+
+.details-title {
+  font-size: 20px !important;
+}
+
+.details-subtitle {
+  font-size: 13px !important;
+}
+
+.patient-info-section {
+  padding: 16px !important;
+}
+
+.patient-info-card {
+  padding: 16px !important;
+}
+
+.patient-id-badge {
+  padding: 6px 12px !important;
+  margin-bottom: 14px !important;
+  font-size: 12px !important;
+}
+
+.info-grid {
+  gap: 12px !important;
+}
+
+.info-item {
+  padding: 12px !important;
+}
+
+.info-label {
+  font-size: 11px !important;
+}
+
+.info-value {
+  font-size: 14px !important;
+}
+
+.action-section {
+  padding: 0 16px 16px !important;
+}
+
+.action-card {
+  padding: 16px !important;
+}
+
+.action-title {
+  font-size: 16px !important;
+}
+
+.action-description {
+  font-size: 13px !important;
+}
+
+.btn-start-case {
+  padding: 12px 20px !important;
+  font-size: 14px !important;
+}
+
+.info-banner {
+  margin: 0 16px 16px !important;
+  padding: 12px 14px !important;
+  font-size: 12px !important;
+}
+
+/* Patient Login specific */
+.patient-login-container {
+  padding: 12px !important;
+}
+
+.login-header {
+  padding: 20px 20px !important;
+}
+
+.login-header-icon {
+  width: 48px !important;
+  height: 48px !important;
+  margin-bottom: 12px !important;
+}
+
+.login-title {
+  font-size: 20px !important;
+  margin-bottom: 6px !important;
+}
+
+.login-subtitle {
+  font-size: 13px !important;
+}
+
+.login-body {
+  padding: 20px 20px !important;
+}
+
+.section-label {
+  margin-bottom: 12px !important;
+  font-size: 11px !important;
+}
+
+.phone-input-group {
+  margin-bottom: 16px !important;
+}
+
+.phone-input-label {
+  font-size: 13px !important;
+  margin-bottom: 6px !important;
+}
+
+.phone-input {
+  padding: 10px 14px 10px 40px !important;
+  font-size: 15px !important;
+}
+
+.phone-input-hint {
+  font-size: 11px !important;
+  margin-top: 4px !important;
+}
+
+.error-alert,
+.success-alert {
+  padding: 10px 12px !important;
+  margin-bottom: 14px !important;
+}
+
+.error-alert-text,
+.success-alert-text {
+  font-size: 12px !important;
+}
+
+.button-group {
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-doctor-login {
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+}
+
+.divider {
+  margin: 16px 0 !important;
+}
+
+.login-footer {
+  padding: 14px 20px !important;
+}
+
+.footer-features {
+  gap: 16px !important;
+}
+
+.footer-feature {
+  font-size: 11px !important;
+}
+
+/* Responsive - Mobile optimization */
+@media (max-width: 768px) {
+  .header {
+    padding: 6px 12px !important;
+  }
+
+  .progress-section {
+    padding: 6px 12px !important;
+
+    top: 50px !important;
+  }
+
+  .scrollable-content {
+
+    padding-top: 100px !important;
+  }
+
+  .content-wrapper {
+    padding: 10px 12px !important;
+  }
+
+  .section-title {
+    font-size: 18px !important;
+  }
+
+  .form-section {
+    padding: 14px !important;
+  }
+
+  .form-group {
+    margin-bottom: 12px !important;
+  }
+
+  .action-buttons {
+    margin-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 6px 10px !important;
+  }
+
+  .progress-section {
+    padding: 6px 10px !important;
+    top: 40px !important;
+  }
+
+  .scrollable-content {
+    padding-top: 84px !important;
+  }
+
+  .content-wrapper {
+    padding: 10px !important;
+  }
+
+  .section-title {
+    font-size: 17px !important;
+  }
+
+  .form-section {
+    padding: 12px !important;
+  }
+
+  .gender-options {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .gender-button {
+    flex-direction: row !important;
+    justify-content: center !important;
+    padding: 10px !important;
+  }
+}
