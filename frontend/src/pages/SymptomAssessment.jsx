@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState,useEffect } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
 import { isPilesComplaint } from './PatientWorkflow'
+import { generateFollowUpQuestions } from '../services/aiAssessment'
 import './SymptomAssessment.css'
 
 function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
@@ -121,9 +122,40 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
     }
   ]
 
-  const questions = pilesCase ? pilesQuestions : feverQuestions
+  const fallbackQuestions = pilesCase ? pilesQuestions : feverQuestions
+  const [questions, setQuestions] = useState(fallbackQuestions)
+  const [questionsLoading, setQuestionsLoading] = useState(true)
+  const [questionsError, setQuestionsError] = useState('')
   const [questionIndex, setQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState(patientData.assessmentAnswers || {})
+
+  useEffect(() => {
+    let cancelled = false
+    setQuestionsLoading(true)
+    setQuestionsError('')
+    setQuestionIndex(0)
+
+    generateFollowUpQuestions({ chiefComplaint: patientData.chiefComplaint, language: patientData.language })
+      .then(generatedQuestions => {
+        const normalized = generatedQuestions.map(question => ({
+          ...question,
+          options: question.options.map(option => [option.label, option.value])
+        }))
+        if (!cancelled) setQuestions(normalized)
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setQuestions(fallbackQuestions)
+          setQuestionsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuestionsLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [patientData.chiefComplaint, patientData.language])
+
   const currentQuestion = questions[questionIndex]
   const selected = currentQuestion?.multi ? (answers[currentQuestion.id] || []) : (answers[currentQuestion?.id] ? [answers[currentQuestion.id]] : [])
   const complete = questionIndex >= questions.length
@@ -148,6 +180,19 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
       // Move to next question or mark complete
       setQuestionIndex(index => index + 1) 
     }
+
+  if (questionsLoading) {
+    return (
+      <div className="scrollable-content">
+        <div className="content-wrapper">
+          <div className="assessment-complete">
+            <h1 className="complete-title">Preparing follow-up questions…</h1>
+            <p className="complete-text">Gemini is personalizing questions from the patient's reported problem.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (complete) {
       console.log('SymptomAssessment complete. Saved answers:', answers)
@@ -186,6 +231,7 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
             {t.assessment.title} {pilesCase ? t.assessment.titlePiles : t.assessment.titleFever}
           </h3>
           <p className="header-card-subtitle">{t.assessment.subtitle}</p>
+          {questionsError && <p className="header-card-subtitle">Using standard questions because the AI service is unavailable.</p>}
         </div>
         
         <div className="question-card">

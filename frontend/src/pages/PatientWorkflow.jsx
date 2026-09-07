@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { translations } from '../data/translations'
 import { Icons } from '../components/Icons'
+import { generateAiAssessment } from '../services/aiAssessment'
 import './PatientWorkflow.css'
 
 export function getInitialWorkflow() {
@@ -339,13 +340,28 @@ function SummaryScreen({ patientData, workflowData, onNavigate }) {
 function AssessmentScreen({ patientData, updateWorkflow, onNavigate }) {
   const { language } = useLanguage()
   const t = translations[language] || translations.en
+  const [aiAssessment, setAiAssessment] = useState(null)
+  const [aiError, setAiError] = useState('')
+  const [aiLoading, setAiLoading] = useState(true)
   
   if (!t || !t.assessmentResult) {
     console.error('AssessmentScreen: Translations not loaded for language:', language)
     return <div>Loading translations...</div>
   }
   const answer = patientData.assessmentAnswers || {}
-  const urgent = (answer.seriousSymptoms || []).some(value => value !== 'none') || answer.bloodColour === 'dark'
+  const locallyUrgent = (answer.seriousSymptoms || []).some(value => value !== 'none') || answer.bloodColour === 'dark'
+  const urgent = locallyUrgent || aiAssessment?.triage === 'urgent'
+
+  useEffect(() => {
+    let cancelled = false
+    setAiLoading(true)
+    setAiError('')
+    generateAiAssessment(patientData)
+      .then(assessment => { if (!cancelled) setAiAssessment(assessment) })
+      .catch(error => { if (!cancelled) setAiError(error.message) })
+      .finally(() => { if (!cancelled) setAiLoading(false) })
+    return () => { cancelled = true }
+  }, [patientData.age, patientData.gender, patientData.language, patientData.chiefComplaint, patientData.assessmentAnswers])
 
   useEffect(() => {
     updateWorkflow({ carePath: urgent ? 'urgent' : 'routine', assessmentComplete: true })
@@ -391,6 +407,19 @@ function AssessmentScreen({ patientData, updateWorkflow, onNavigate }) {
           </p>
         </Card>
       </div>
+
+      <Card title="Gemini clinical intake summary">
+        {aiLoading && <p className="observation-text">Preparing a clinician-facing summary…</p>}
+        {aiError && <p className="ai-error">{aiError}</p>}
+        {aiAssessment && (
+          <div className="ai-summary">
+            <p>{aiAssessment.summary}</p>
+            {aiAssessment.redFlags?.length > 0 && <div><strong>Reported red flags</strong><ul>{aiAssessment.redFlags.map(flag => <li key={flag}>{flag}</li>)}</ul></div>}
+            {aiAssessment.recommendedNextSteps?.length > 0 && <div><strong>Recommended next steps</strong><ul>{aiAssessment.recommendedNextSteps.map(step => <li key={step}>{step}</li>)}</ul></div>}
+            <small>{aiAssessment.disclaimer}</small>
+          </div>
+        )}
+      </Card>
 
       <ActionBar
         onBack={() => onNavigate(7)}
