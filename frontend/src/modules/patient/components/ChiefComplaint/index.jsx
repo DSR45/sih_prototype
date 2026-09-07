@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
 import ScreenShell from '@shared/components/Layout/ScreenShell'
 import StepNavigation from '@shared/components/Navigation/StepNavigation'
 import { PATIENT_FLOW } from '@shared/constants'
+import { supabasePatientAdapter } from '@shared/services/supabaseAdapter'
 import { updateChiefComplaint } from '@shared/services/api/sessionService'
 import { saveQuestionResponse } from '@shared/services/api/questionService'
 import './styles.css'
@@ -15,7 +16,68 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
   const [selectedSymptoms, setSelectedSymptoms] = useState(patientData.complaintTags || [])
   const [isListening, setIsListening] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+    const [error, setError] = useState('')
+    const [voiceSupported, setVoiceSupported] = useState(false)
+    const recognitionRef = useRef(null)
+    const voiceTextRef = useRef('')
+
+    useEffect(() => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SpeechRecognition) return
+
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+            recognition.interimResults = true
+            recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN'
+
+            recognition.onstart = () => {
+              setIsListening(true)
+              setError('')
+            }
+
+            recognition.onresult = (event) => {
+              let finalTranscript = ''
+              let interimTranscript = ''
+
+              for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                const text = event.results[index][0].transcript
+                if (event.results[index].isFinal) {
+                  finalTranscript += text
+                } else {
+                  interimTranscript += text
+                }
+              }
+
+              const baseText = voiceTextRef.current.trim()
+              const committedText = `${baseText}${baseText && finalTranscript.trim() ? ' ' : ''}${finalTranscript.trim()}`.trim()
+
+              if (finalTranscript.trim()) {
+                voiceTextRef.current = committedText
+              }
+
+              const visibleText = `${committedText}${committedText && interimTranscript.trim() ? ' ' : ''}${interimTranscript.trim()}`.trim()
+              onUpdateData({ chiefComplaint: visibleText })
+            }
+
+            recognition.onend = () => {
+              setIsListening(false)
+              voiceTextRef.current = patientData.chiefComplaint || voiceTextRef.current
+            }
+      recognition.onerror = (event) => {
+        setIsListening(false)
+        setError(event.error === 'not-allowed'
+          ? 'Please allow microphone access.'
+          : 'Voice input failed. Please try again.')
+      }
+
+      recognitionRef.current = recognition
+      setVoiceSupported(true)
+
+      return () => {
+        recognition.abort()
+        recognitionRef.current = null
+      }
+    }, [language, onUpdateData])
 
   const commonSymptoms = [
     { id: 'fever', label: t.complaint.symptoms.fever, icon: Icons.Thermometer },
@@ -36,12 +98,33 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
     onUpdateData({ complaintTags: nextSelected })
   }
 
-  const handleSpeak = () => {
-    setIsListening(!isListening)
-    // Voice recognition implementation would go here
+    const handleSpeak = () => {
+    if (!voiceSupported || !recognitionRef.current) {
+      setError('Voice input is not supported in this browser.')
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop()
+      setIsListening(false)
+      return
+    }
+
+    voiceTextRef.current = patientData.chiefComplaint || ''
+    setError('')
+        try {
+      recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-IN'
+      recognitionRef.current.start()
+      setIsListening(true)
+    } catch (recognitionError) {
+      console.error('Unable to start voice recognition:', recognitionError)
+      setIsListening(false)
+      setError('Please try the microphone again.')
+    }
   }
 
-    const handleUpdateComplaint = (value) => {
+  const handleUpdateComplaint = (value) => {
+    voiceTextRef.current = value
     onUpdateData({ chiefComplaint: value })
   }
 
@@ -72,26 +155,35 @@ function ChiefComplaint({ patientData, onNavigate, onUpdateData }) {
         category = 'General Weakness'
       }
 
-      // Update session with chief complaint
-      if (patientData.sessionId) {
-        await updateChiefComplaint(
-          patientData.sessionId,
-          patientData.chiefComplaint,
-          category
-        )
+            // Create the visit session only after Continue is clicked.
+      const session = await supabasePatientAdapter.createSession({
+        patient_id: patientData.patientId,
+        department: 'General Medicine',
+        language_used: patientData.language || 'English',
+        chief_complaint: patientData.chiefComplaint.trim(),
+        complaint_category: category,
+        consent_given: true,
+        status: 'in_progress'
+      })
 
-        // Save selected symptoms as question responses
-        if (selectedSymptoms.length > 0) {
-          await saveQuestionResponse(
-            patientData.sessionId,
-            'Selected symptoms',
-            selectedSymptoms.join(', '),
-            'Chief Complaint'
-          )
-        }
-
-        console.log('✅ Chief complaint saved to backend')
+      const sessionId = session?.session_id || session?.id
+      if (!sessionId) {
+        throw new Error('Session was created without a session ID')
       }
+
+      await updateChiefComplaint(sessionId, patientData.chiefComplaint.trim(), category)
+
+      if (selectedSymptoms.length > 0) {
+        await saveQuestionResponse(
+          sessionId,
+          'Selected symptoms',
+          selectedSymptoms.join(', '),
+          'Chief Complaint'
+        )
+      }
+
+      onUpdateData({ sessionId })
+      console.log('✅ Session and chief complaint saved to backend')
 
       // Update local state
       onUpdateData({ 

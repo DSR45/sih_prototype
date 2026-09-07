@@ -73,30 +73,19 @@ function PatientInformation({ patientData, onNavigate, onUpdateData }) {
       const createdPatient = await supabasePatientAdapter.registerPatient(payload)
       const nextPatientId = createdPatient?.patient_id || patientData.patientId || null
 
-      const createdSession = await supabasePatientAdapter.createSession({
-        patient_id: nextPatientId,
-        chief_complaint: patientData.chiefComplaint || 'Registration completed',
-        complaint_category: 'General',
-        department: 'General Medicine',
-        language_used: payload.preferred_language,
-        consent_given: true,
-        status: 'in_progress'
-      })
-
-            onUpdateData({
-        patientId: nextPatientId,
-        sessionId: createdSession?.session_id || createdSession?.id || null,
-        fullName: payload.full_name,
-        age: payload.age,
-        gender: payload.gender,
-        mobile: payload.phone,
-        language: payload.preferred_language,
-        // Clear old session data
-        chiefComplaint: '',
-        complaintCategory: '',
-        complaintTags: [],
-        assessmentAnswers: {}
-      })
+      onUpdateData({
+              patientId: nextPatientId,
+              sessionId: '',
+              fullName: payload.full_name,
+              age: payload.age,
+              gender: payload.gender,
+              mobile: payload.phone,
+              language: payload.preferred_language,
+              chiefComplaint: '',
+              complaintCategory: '',
+              complaintTags: [],
+              assessmentAnswers: {}
+            })
 
       onNavigate(4)
     } catch (error) {
