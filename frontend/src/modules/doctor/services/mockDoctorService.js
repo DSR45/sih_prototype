@@ -15,20 +15,27 @@ const mockDoctorQueue = [
 export async function getDoctorProfile() {
   try {
     const doctor = await supabaseDoctorAdapter.getDoctorProfile()
-    return doctor || { ...mockDoctor }
+    const name = doctor?.name || doctor?.full_name || 'Doctor'
+    return {
+      ...doctor,
+      name,
+      specialty: doctor?.specialty || doctor?.specialization || 'General Medicine',
+      clinic: doctor?.clinic || 'MediKiosk Care Centre',
+      initials: name.split(/[ .]/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'DR'
+    }
   } catch (error) {
-    console.warn('Supabase doctor profile fetch failed; using local fallback.', error)
-    return { ...mockDoctor }
+    console.warn('Supabase doctor profile fetch failed.', error)
+    return { name: 'Doctor', specialty: 'General Medicine', clinic: 'MediKiosk Care Centre', initials: 'DR' }
   }
 }
 
 export async function getDoctorQueueData() {
   try {
     const queue = await supabaseDoctorAdapter.getQueue()
-    return queue.length ? queue : [...mockDoctorQueue]
+    return queue
   } catch (error) {
-    console.warn('Supabase queue fetch failed; using local fallback.', error)
-    return [...mockDoctorQueue]
+    console.warn('Supabase queue fetch failed.', error)
+    return []
   }
 }
 

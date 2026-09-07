@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icons } from '@shared/components/Icons'
-import { doctorActivity, doctorQueue, mockClinicalRecord, mockDoctor } from '@shared/constants/mockData'
-import { getDoctorProfile, getDoctorQueueData } from '../../services/mockDoctorService'
+import { supabaseDoctorAdapter, supabasePatientAdapter } from '@shared/services/supabaseAdapter'
 import './styles.css'
 
 const navItems = [
@@ -16,9 +15,7 @@ const navItems = [
 ]
 
 const initialNotifications = [
-  { id: 1, title: 'New patient intake', message: 'Rahul Sharma is ready for review.', time: '2 min ago', unread: true },
-  { id: 2, title: 'Extraction completed', message: 'Patient document MK-1048 is ready.', time: '10 min ago', unread: true },
-  { id: 3, title: 'Consultation saved', message: "Sunita Rao's notes were saved.", time: '28 min ago', unread: false }
+  
 ]
 
 const availableAccounts = [
@@ -26,29 +23,128 @@ const availableAccounts = [
   { name: 'Dr. Rohan Kapoor', specialty: 'Internal Medicine', initials: 'RK' }
 ]
 
+function parseOcrFields(ocrText) {
+  if (!ocrText) return []
+
+  return ocrText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes(':'))
+    .map((line) => {
+      const [label, ...valueParts] = line.split(':')
+      return {
+        label: label.trim(),
+        value: valueParts.join(':').trim(),
+        confidence: 100,
+        source: 'OCR text',
+        doctorEdited: false
+      }
+    })
+    .filter((field) => field.label && field.value)
+}
+
+function normalizeExtractedFields(document, details, medicineRows = []) {
+  const extractedInfo = document?.extracted_info
+  const sourceEntries = Array.isArray(extractedInfo)
+    ? extractedInfo.map((item) => [item.label || item.field || item.name, item])
+    : Object.entries(extractedInfo || {})
+
+  const extractedFields = sourceEntries.length
+    ? sourceEntries
+      .filter(([label]) => label && !['medicines', 'medications'].includes(String(label).toLowerCase()))
+      .map(([label, item]) => ({
+        label,
+        value: typeof item === 'object' && item !== null ? item.value ?? item.answer ?? JSON.stringify(item) : String(item),
+        original: typeof item === 'object' && item !== null ? item.original : undefined,
+        confidence: Number(item?.confidence ?? document.ocr_confidence ?? 100),
+        source: item?.source || 'Uploaded patient document',
+        doctorEdited: false
+      }))
+    : parseOcrFields(document?.ocr_text)
+
+  if (extractedFields.length) return [...extractedFields, ...medicineFields(medicineRows)]
+
+  const patient = details?.patient || {}
+  const session = details?.session || {}
+  const history = details?.medical_history || {}
+  return [
+    { label: 'Patient name', value: patient.full_name, source: 'Patient record' },
+    { label: 'Primary concern', value: session.chief_complaint, source: 'Patient session' },
+    { label: 'Age', value: patient.age ? `${patient.age} years` : '', source: 'Patient record' },
+    { label: 'Gender', value: patient.gender, source: 'Patient record' },
+    { label: 'Allergies', value: history.allergies, source: 'Medical history' }
+  ]
+    .filter((field) => field.value)
+    .map((field) => ({ ...field, confidence: 100, doctorEdited: false }))
+    .concat(medicineFields(medicineRows))
+}
+
+function medicineFields(medicineRows) {
+  return medicineRows.flatMap((medicine, index) => [
+    { label: `Medicine name ${index + 1}`, value: medicine.medicine_name, source: 'OCR medicines', confidence: medicine.confidence || 100, doctorEdited: false },
+    { label: `Dosage ${index + 1}`, value: medicine.dosage, source: 'OCR medicines', confidence: medicine.confidence || 100, doctorEdited: false },
+    { label: `Frequency ${index + 1}`, value: medicine.frequency, source: 'OCR medicines', confidence: medicine.confidence || 100, doctorEdited: false },
+    { label: `Duration ${index + 1}`, value: medicine.duration, source: 'OCR medicines', confidence: medicine.confidence || 100, doctorEdited: false }
+  ].filter((field) => field.value))
+}
+
+function normalizeMedicines(document, medicineRows) {
+  if (medicineRows.length) return medicineRows
+
+  const extractedInfo = document?.extracted_info || {}
+  const extractedMedicines = extractedInfo.medicines || extractedInfo.medications || []
+  return Array.isArray(extractedMedicines) ? extractedMedicines.map((medicine, index) => ({
+    medicine_id: medicine.medicine_id || `extracted-medicine-${index}`,
+    medicine_name: medicine.medicine_name || medicine.name || medicine.medicine || '',
+    dosage: medicine.dosage || '',
+    frequency: medicine.frequency || '',
+    duration: medicine.duration || ''
+  })).filter((medicine) => medicine.medicine_name) : []
+}
+
+function getPatientFieldValue(field, patient, sessionDetails) {
+  const label = field.label.toLowerCase()
+  const session = sessionDetails?.session || {}
+
+  if (label.includes('patient name') || label === 'name') return patient?.name
+  if (label.includes('patient id') || label === 'id') return patient?.id
+  if (label.includes('primary concern') || label.includes('chief complaint')) return session.chief_complaint || patient?.concern
+  if (label === 'age') return patient?.age ? `${patient.age} years` : undefined
+  if (label === 'gender') return patient?.gender
+
+  return undefined
+}
+
 function DoctorDashboard({ onLogout, onPatientAccess }) {
   const [activeView, setActiveView] = useState('overview')
-  const [queueItems, setQueueItems] = useState(doctorQueue)
-  const [selectedPatient, setSelectedPatient] = useState(doctorQueue[0])
+  const [queueItems, setQueueItems] = useState([])
+  const [selectedPatient, setSelectedPatient] = useState(null)
   const [openMenu, setOpenMenu] = useState(null)
   const [notifications, setNotifications] = useState(initialNotifications)
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [doctor, setDoctor] = useState(() => JSON.parse(localStorage.getItem('medikiosk-doctor-profile') || JSON.stringify(mockDoctor)))
+  const [doctor, setDoctor] = useState({ name: 'Doctor', specialty: 'General Medicine', clinic: 'MediKiosk Care Centre', initials: 'DR' })
   const [savedNotes, setSavedNotes] = useState(() => JSON.parse(localStorage.getItem('medikiosk-doctor-notes') || '{}'))
-  const [extractedFields, setExtractedFields] = useState(() => JSON.parse(localStorage.getItem('medikiosk-extracted-fields') || JSON.stringify(mockClinicalRecord.extracted.map((field) => ({ ...field, doctorEdited: false })))) )
+  const [extractedFields, setExtractedFields] = useState([])
   const [reviewField, setReviewField] = useState(null)
   const [showNotesEditor, setShowNotesEditor] = useState(false)
   const [consultationPatient, setConsultationPatient] = useState(null)
+  const [documents, setDocuments] = useState([]);
+  const [questionResponses, setQuestionResponses] = useState([])
+  const [medicines, setMedicines] = useState([]);
+  const [sessionDetails, setSessionDetails] = useState(null)
   const headerActionsRef = useRef(null)
 
   useEffect(() => {
     async function loadDoctorWorkspaceData() {
       try {
-        const [profile, queue] = await Promise.all([getDoctorProfile(), getDoctorQueueData()])
+        const [profile, queue] = await Promise.all([
+          supabaseDoctorAdapter.getDoctorProfile(),
+          supabaseDoctorAdapter.getQueue()
+        ])
         setDoctor(profile)
         setQueueItems(queue)
-        setSelectedPatient((current) => current || queue[0] || doctorQueue[0])
+        setSelectedPatient(queue[0] || null)
       } catch (error) {
         console.warn('Doctor workspace data load failed:', error)
       }
@@ -64,10 +160,6 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
   useEffect(() => {
     localStorage.setItem('medikiosk-doctor-notes', JSON.stringify(savedNotes))
   }, [savedNotes])
-
-  useEffect(() => {
-    localStorage.setItem('medikiosk-extracted-fields', JSON.stringify(extractedFields))
-  }, [extractedFields])
 
   useEffect(() => {
     const handleOutsideClick = (event) => {
@@ -89,6 +181,84 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
       document.removeEventListener('keydown', handleEscape)
     }
   }, [])
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPatientRecord() {
+      if (!selectedPatient?.sessionId) {
+        setSessionDetails(null)
+        setDocuments([])
+        setQuestionResponses([])
+        setExtractedFields([])
+        setMedicines([])
+        return
+      }
+
+      try {
+        setDocuments([])
+        setExtractedFields([])
+        setMedicines([])
+        const details = await supabasePatientAdapter.getPatientDetails(selectedPatient.sessionId)
+        const docs = await supabasePatientAdapter.getSessionDocuments(selectedPatient.sessionId)
+        const docsWithUrls = await Promise.all(docs.map(async (doc) => ({
+          ...doc,
+          file_url: await supabasePatientAdapter.getDocumentUrl(doc.file_url)
+        })))
+
+        if (cancelled) return
+
+        setSessionDetails(details)
+        setDocuments(docsWithUrls)
+        setQuestionResponses(details.question_responses || [])
+      } catch (error) {
+        if (!cancelled) console.warn("Couldn't load patient record:", error)
+      }
+    }
+
+    loadPatientRecord()
+    return () => { cancelled = true }
+  }, [selectedPatient])
+
+  useEffect(() => {
+    const document = documents[0]
+    if (!document?.document_id) return
+
+    let cancelled = false
+
+    async function loadExtractedDocumentData() {
+      try {
+        const medicineRows = await supabasePatientAdapter.getMedicines(document.document_id)
+        const normalizedMedicines = normalizeMedicines(document, medicineRows)
+
+        if (cancelled) return
+
+        setMedicines(normalizedMedicines)
+        setExtractedFields(normalizeExtractedFields(document, sessionDetails, normalizedMedicines))
+      } catch (error) {
+        if (!cancelled) console.warn("Couldn't load extracted document data:", error)
+      }
+    }
+
+    loadExtractedDocumentData()
+    return () => { cancelled = true }
+  }, [documents, sessionDetails])
+
+  const comparisonRows = extractedFields.map((field) => ({
+    field: field.label,
+    original: field.original || getPatientFieldValue(field, selectedPatient, sessionDetails) || field.value,
+    extracted: field.value,
+    status: (field.original || getPatientFieldValue(field, selectedPatient, sessionDetails)) &&
+      (field.original || getPatientFieldValue(field, selectedPatient, sessionDetails)) !== field.value
+      ? 'review'
+      : 'match'
+  }))
+
+  const summary = {
+    overview: sessionDetails?.ai_summary?.ai_summary || `${selectedPatient?.name || 'Patient'} is being reviewed for ${selectedPatient?.concern || 'the submitted concern'}.`,
+    keyFindings: [],
+    suggestedChecks: [],
+    generatedAt: sessionDetails?.session?.created_at ? new Date(sessionDetails.session.created_at).toLocaleString() : 'Available now'
+  }
 
   const selectPatient = (patient) => {
     setSelectedPatient(patient)
@@ -99,7 +269,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
     <main className="doctor-workspace">
       <aside className="doctor-sidebar">
         <div className="workspace-brand"><span><Icons.Heart /></span><strong>MediKiosk</strong></div>
-        <div className="workspace-clinic"><span className="clinic-dot" /> {mockDoctor.clinic}</div>
+        <div className="workspace-clinic"><span className="clinic-dot" /> {doctor.clinic}</div>
         <nav className="workspace-nav" aria-label="Doctor workspace navigation">
           <p>WORKSPACE</p>
           {navItems.map(({ id, label, icon: Icon }) => (
@@ -130,12 +300,18 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
           </div>
         </header>
 
-        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} queueItems={queueItems} />}
-        {activeView === 'patients' && <PatientQueue selectedPatient={selectedPatient} onSelectPatient={setSelectedPatient} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} />}
-        {activeView === 'documents' && <OriginalDocuments onNext={() => setActiveView('extracted')} />}
-        {activeView === 'extracted' && <ExtractedInformation fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => setActiveView('compare')} onBack={() => setActiveView('documents')} />}
-        {activeView === 'compare' && <CompareInformation fields={extractedFields} hasComparison={selectedPatient.id === mockClinicalRecord.patientId} onNext={() => setActiveView('summary')} onBack={() => setActiveView('extracted')} onReviewField={() => { setReviewField('Current medication'); setActiveView('extracted') }} />}
-        {activeView === 'summary' && <ClinicalSummary patient={selectedPatient} savedNote={savedNotes[selectedPatient.id] || ''} onStartConsultation={() => { setConsultationPatient(selectedPatient); setActiveView('consultation') }} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => setActiveView('compare')} onBack={() => setActiveView('compare')} />}
+        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} queueItems={queueItems} activityItems={queueItems.slice(0, 3)} />}
+        {activeView === 'patients' && (<PatientQueue selectedPatient={selectedPatient} onSelectPatient={setSelectedPatient} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} questionResponses={questionResponses}/>)}
+        {activeView === 'documents' && (
+  <OriginalDocuments
+    patient={selectedPatient}
+    documents={documents}
+    onNext={() => setActiveView('extracted')}
+  />
+)}
+        {activeView === 'extracted' && <ExtractedInformation patient={selectedPatient} fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => setActiveView('compare')} onBack={() => setActiveView('documents')} />}
+        {activeView === 'compare' && <CompareInformation fields={extractedFields} comparisonRows={comparisonRows} hasComparison={comparisonRows.length > 0} onNext={() => setActiveView('summary')} onBack={() => setActiveView('extracted')} onReviewField={() => { setReviewField(comparisonRows.find((row) => row.status === 'review')?.field || null); setActiveView('extracted') }} />}
+        {activeView === 'summary' && selectedPatient && <ClinicalSummary patient={selectedPatient} medicines={medicines} summary={summary} savedNote={savedNotes[selectedPatient.id] || ""} onStartConsultation={() => { setConsultationPatient(selectedPatient); setActiveView("consultation");}} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => setActiveView("compare")} onBack={() => setActiveView("compare")}/>}
         {activeView === 'consultation' && <Consultation patient={consultationPatient || selectedPatient} note={savedNotes[selectedPatient.id] || ''} onBack={() => setActiveView('summary')} />}
         {activeView === 'reports' && <Reports />}
         {activeView === 'settings' && <Settings doctor={doctor} onSave={setDoctor} />}
@@ -175,11 +351,11 @@ function PageHeading({ eyebrow, title, description, action }) {
   return <div className="page-heading"><div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>{action}</div>
 }
 
-function Overview({ onSelectPatient, onQueue, queueItems }) {
+function Overview({ onSelectPatient, onQueue, queueItems, activityItems }) {
   return <div className="workspace-content">
-    <PageHeading eyebrow="MONDAY, 05 SEPTEMBER 2026" title="Good morning, Dr. Mehta" description="Here is what needs your attention today." action={<button className="primary-action" onClick={onQueue}><Icons.Users /> View patient queue</button>} />
-    <div className="metric-grid"><Metric label="Patients today" value="24" change="+12%" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value={String(queueItems.filter((patient) => patient.status !== 'Completed').length)} change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="11 min" change="-8%" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value={String(queueItems.filter((patient) => patient.status === 'Completed').length)} change="Daily goal" icon={Icons.CheckCircle} tone="green" /></div>
-    <div className="workspace-columns"><section className="surface-card queue-card"><div className="card-heading"><div><h2>Patient queue</h2><p>Review intake details before consultation.</p></div><button className="quiet-button" onClick={onQueue}>View all <Icons.ChevronRight /></button></div><div className="queue-list">{queueItems.slice(0, 3).map((patient) => <QueueRow key={patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}</div></section><section className="surface-card activity-card"><div className="card-heading"><div><h2>Recent activity</h2><p>Updates from your workspace.</p></div><Icons.More /></div>{doctorActivity.map((item) => <div className="activity-row" key={item.title}><span className={`activity-dot ${item.tone}`} /><div><strong>{item.title}</strong><p>{item.detail}</p></div><time>{item.time}</time></div>)}</section></div>
+    <PageHeading eyebrow="DOCTOR WORKSPACE" title="Patient overview" description="Review submitted patient intakes and continue their clinical review." action={<button className="primary-action" onClick={onQueue}><Icons.Users /> View patient queue</button>} />
+    <div className="metric-grid"><Metric label="Patients today" value={String(queueItems.length)} change="Submitted intakes" icon={Icons.Users} tone="blue" /><Metric label="Waiting now" value={String(queueItems.filter((patient) => patient.status !== 'Completed').length)} change="Needs attention" icon={Icons.Clock} tone="orange" /><Metric label="Avg. wait time" value="-" change="Live queue" icon={Icons.Activity} tone="teal" /><Metric label="Completed" value={String(queueItems.filter((patient) => patient.status === 'Completed').length)} change="Reviewed records" icon={Icons.CheckCircle} tone="green" /></div>
+    <div className="workspace-columns"><section className="surface-card queue-card"><div className="card-heading"><div><h2>Patient queue</h2><p>Review intake details before consultation.</p></div><button className="quiet-button" onClick={onQueue}>View all <Icons.ChevronRight /></button></div><div className="queue-list">{queueItems.slice(0, 3).map((patient) => <QueueRow key={patient.sessionId || patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}</div></section><section className="surface-card activity-card"><div className="card-heading"><div><h2>Recent patients</h2><p>Latest submitted records.</p></div><Icons.More /></div>{activityItems.map((item) => <div className="activity-row" key={item.sessionId || item.id}><span className={`activity-dot ${item.status === 'Completed' ? 'green' : 'teal'}`} /><div><strong>{item.name}</strong><p>{item.concern}</p></div><time>{item.time}</time></div>)}</section></div>
   </div>
 }
 
@@ -199,7 +375,7 @@ function downloadFile(filename, content, mimeType) {
 }
 
 function originalDocumentContent(document) {
-  return `MediKiosk Patient Intake\nIntake ID: MK-1048\n\nPatient information\nRahul Sharma · 32 years · Male\nMobile: 9876543210\n\nChief complaint\nFever and headache since yesterday\nPatient describes an acute onset of symptoms.\n\nMedical history\nNo known allergies reported\nCurrent medication: Paracetamol 500 mg as needed\n\nSubmitted through patient kiosk · ${document.uploaded}\n`
+  return document.ocr_text || `Document type: ${document.document_type || 'Patient document'}\nUploaded: ${document.uploaded_at || 'Unknown'}\n`
 }
 
 function LegacyPatientQueue({ selectedPatient, onSelectPatient, onOpenRecord }) {
@@ -207,26 +383,246 @@ function LegacyPatientQueue({ selectedPatient, onSelectPatient, onOpenRecord }) 
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const filteredPatients = doctorQueue.filter((patient) => patient.name.toLowerCase().includes(normalizedQuery))
 
-  return <div className="workspace-content"><PageHeading eyebrow="PATIENT MANAGEMENT" title="Patient queue" description="Review every intake before starting the consultation." action={<button className="secondary-action"><Icons.Download /> Export list</button>} /><div className="queue-toolbar"><div className="search-box"><Icons.Search /><input placeholder="Search patient name or ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></div><button className="filter-button">All patients <Icons.ChevronDown /></button><span>{filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}</span></div><div className="patient-queue-layout"><section className="surface-card full-queue"><div className="table-heading"><span>Patient</span><span>Concern</span><span>Arrival</span><span>Status</span></div>{filteredPatients.map((patient) => <QueueRow key={patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}{filteredPatients.length === 0 && <p className="empty-search-state">No patients found.</p>}</section><PatientDetail patient={selectedPatient} onOpenRecord={onOpenRecord} /></div></div>
+    return (
+      <div className="workspace-content">
+        <PageHeading
+          eyebrow="PATIENT MANAGEMENT"
+          title="Patient queue"
+          description="Review every intake before starting the consultation."
+          action={
+            <button className="secondary-action">
+              <Icons.Download /> Export list
+            </button>
+          }
+        />
+        <div className="queue-toolbar">
+          <div className="search-box">
+            <Icons.Search />
+            <input
+              placeholder="Search patient name or ID"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+            />
+          </div>
+          <button className="filter-button">All patients <Icons.ChevronDown /></button>
+          <span>
+            {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}
+          </span>
+        </div>
+        <div className="patient-queue-layout">
+          <section className="surface-card full-queue">
+            <div className="table-heading">
+              <span>Patient</span>
+              <span>Concern</span>
+              <span>Arrival</span>
+              <span>Status</span>
+            </div>
+            {filteredPatients.map((patient) => (
+              <QueueRow
+                key={patient.id}
+                patient={patient}
+                onClick={() => onSelectPatient(patient)}
+              />
+            ))}
+            {filteredPatients.length === 0 && (
+              <p className="empty-search-state">No patients found.</p>
+            )}
+          </section>
+          <PatientDetail patient={selectedPatient} onOpenRecord={onOpenRecord} />
+        </div>
+      </div>
+    )
 }
 
 function LegacyPatientDetail({ patient, onOpenRecord }) { return <aside className="surface-card patient-detail"><div className="detail-top"><span className="large-avatar">{patient.name.split(' ').map((part) => part[0]).join('')}</span><div><h2>{patient.name}</h2><p>{patient.age} years · {patient.gender}</p></div><button className="icon-action"><Icons.More /></button></div><div className="detail-id"><span>INTAKE ID</span><strong>{patient.id}</strong></div><div className="detail-section"><span>PRIMARY CONCERN</span><strong>{patient.concern}</strong><p>Patient submitted this concern through the kiosk intake form.</p></div><div className="detail-section"><span>INTAKE DETAILS</span><div className="detail-line"><b>Arrival time</b><em>{patient.time}</em></div><div className="detail-line"><b>Wait time</b><em>{patient.wait}</em></div></div><button className="primary-action detail-action" onClick={onOpenRecord}><Icons.Clipboard /> Open patient record</button></aside> }
 
-function PatientQueue({ selectedPatient, onSelectPatient, onOpenRecord, queueItems }) {
+function PatientQueue({
+  selectedPatient,
+  onSelectPatient,
+  onOpenRecord,
+  queueItems,
+  questionResponses
+}) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+
   const statuses = ['All', 'Ready', 'Waiting', 'Completed']
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredPatients = queueItems.filter((patient) => patient.name.toLowerCase().includes(normalizedQuery) && (statusFilter === 'All' || patient.status === statusFilter))
-  const cycleFilter = () => setStatusFilter(statuses[(statuses.indexOf(statusFilter) + 1) % statuses.length])
-  const exportPatients = () => downloadFile('medikiosk_patient_queue.txt', filteredPatients.map((patient) => `${patient.id} | ${patient.name} | ${patient.concern} | ${patient.status}`).join('\n'), 'text/plain;charset=utf-8')
 
-  return <div className="workspace-content"><PageHeading eyebrow="PATIENT MANAGEMENT" title="Patient queue" description="Review every intake before starting the consultation." action={<button className="secondary-action" onClick={exportPatients}><Icons.Download /> Export list</button>} /><div className="queue-toolbar"><div className="search-box"><Icons.Search /><input placeholder="Search patient name or ID" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} /></div><button className="filter-button" onClick={cycleFilter} aria-label={`Filter patients, currently ${statusFilter}`}>{statusFilter} patients <Icons.ChevronDown /></button><span>{filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}</span></div><div className="patient-queue-layout"><section className="surface-card full-queue"><div className="table-heading"><span>Patient</span><span>Concern</span><span>Arrival</span><span>Status</span></div>{filteredPatients.map((patient) => <QueueRow key={patient.id} patient={patient} onClick={() => onSelectPatient(patient)} />)}{filteredPatients.length === 0 && <p className="empty-search-state">No patients found.</p>}</section><PatientDetail patient={selectedPatient} onOpenRecord={onOpenRecord} /></div></div>
+  const filteredPatients = queueItems.filter(
+    (patient) =>
+      patient.name.toLowerCase().includes(normalizedQuery) &&
+      (statusFilter === 'All' || patient.status === statusFilter)
+  )
+
+  const cycleFilter = () =>
+    setStatusFilter(statuses[(statuses.indexOf(statusFilter) + 1) % statuses.length])
+
+  const exportPatients = () =>
+    downloadFile(
+      'medikiosk_patient_queue.txt',
+      filteredPatients
+        .map(
+          (patient) =>
+            `${patient.id} | ${patient.name} | ${patient.concern} | ${patient.status}`
+        )
+        .join('\n'),
+      'text/plain;charset=utf-8'
+    )
+
+  return (
+    <div className="workspace-content">
+      <PageHeading
+        eyebrow="PATIENT MANAGEMENT"
+        title="Patient queue"
+        description="Review every intake before starting the consultation."
+        action={
+          <button className="secondary-action" onClick={exportPatients}>
+            <Icons.Download /> Export list
+          </button>
+        }
+      />
+
+      <div className="queue-toolbar">
+        <div className="search-box">
+          <Icons.Search />
+          <input
+            placeholder="Search patient name or ID"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
+
+        <button
+          className="filter-button"
+          onClick={cycleFilter}
+          aria-label={`Filter patients, currently ${statusFilter}`}
+        >
+          {statusFilter} patients <Icons.ChevronDown />
+        </button>
+
+        <span>
+          {filteredPatients.length}{' '}
+          {filteredPatients.length === 1 ? 'patient' : 'patients'}
+        </span>
+      </div>
+
+      <div className="patient-queue-layout">
+        <section className="surface-card full-queue">
+          <div className="table-heading">
+            <span>Patient</span>
+            <span>Concern</span>
+            <span>Arrival</span>
+            <span>Status</span>
+          </div>
+
+          {filteredPatients.map((patient) => (
+            <QueueRow
+              key={patient.sessionId || `${patient.id}-${patient.time}`}
+              patient={patient}
+              onClick={() => onSelectPatient(patient)}
+            />
+          ))}
+
+          {filteredPatients.length === 0 && (
+            <p className="empty-search-state">No patients found.</p>
+          )}
+        </section>
+
+        <PatientDetail
+          patient={selectedPatient}
+          onOpenRecord={onOpenRecord}
+          questionResponses={questionResponses}
+        />
+      </div>
+    </div>
+  )
 }
 
-function PatientDetail({ patient, onOpenRecord }) {
+function PatientDetail({ patient, onOpenRecord, questionResponses = [] }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  return <aside className="surface-card patient-detail"><div className="detail-top"><span className="large-avatar">{patient.name.split(' ').map((part) => part[0]).join('')}</span><div><h2>{patient.name}</h2><p>{patient.age} years · {patient.gender}</p></div><div className="detail-menu-anchor"><button className="icon-action" aria-label="Patient actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Icons.More /></button>{menuOpen && <div className="detail-action-menu"><button onClick={onOpenRecord}><Icons.FileText /> Open patient record</button><button onClick={() => setMenuOpen(false)}><Icons.Clipboard /> View intake details</button></div>}</div></div><div className="detail-id"><span>INTAKE ID</span><strong>{patient.id}</strong></div><div className="detail-section"><span>PRIMARY CONCERN</span><strong>{patient.concern}</strong><p>Patient submitted this concern through the kiosk intake form.</p></div><div className="detail-section"><span>INTAKE DETAILS</span><div className="detail-line"><b>Arrival time</b><em>{patient.time}</em></div><div className="detail-line"><b>Wait time</b><em>{patient.wait}</em></div></div><button className="primary-action detail-action" onClick={onOpenRecord}><Icons.Clipboard /> Open patient record</button></aside>
+
+  return (
+    <aside className="surface-card patient-detail">
+      <div className="detail-top">
+        <span className="large-avatar">
+          {patient.name.split(" ").map((part) => part[0]).join("")}
+        </span>
+
+        <div>
+          <h2>{patient.name}</h2>
+          <p>{patient.age} years · {patient.gender}</p>
+        </div>
+
+        <div className="detail-menu-anchor">
+          <button
+            className="icon-action"
+            aria-label="Patient actions"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <Icons.More />
+          </button>
+
+          {menuOpen && (
+            <div className="detail-action-menu">
+              <button onClick={onOpenRecord}>
+                <Icons.FileText /> Open patient record
+              </button>
+
+              <button onClick={() => setMenuOpen(false)}>
+                <Icons.Clipboard /> View intake details
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="detail-id">
+        <span>INTAKE ID</span>
+        <strong>{patient.id}</strong>
+      </div>
+
+      <div className="detail-section">
+        <span>PRIMARY CONCERN</span>
+        <strong>{patient.concern}</strong>
+        <p>Patient submitted this concern through the kiosk intake form.</p>
+      </div>
+
+      <div className="detail-section">
+        <span>INTAKE DETAILS</span>
+
+        <div className="detail-line">
+          <b>Arrival time</b>
+          <em>{patient.time}</em>
+        </div>
+
+        <div className="detail-line">
+          <b>Wait time</b>
+          <em>{patient.wait}</em>
+        </div>
+      </div>
+
+      <div className="detail-section">
+        <span>PATIENT RESPONSES</span>
+
+        {questionResponses.length ? (
+          questionResponses.map((item) => (
+            <div key={item.response_id} className="detail-line">
+              <b>{item.question}</b>
+              <em>{item.answer}</em>
+            </div>
+          ))
+        ) : (
+          <p>No responses available.</p>
+        )}
+      </div>
+
+      <button className="primary-action detail-action" onClick={onOpenRecord}>
+        <Icons.Clipboard /> Open patient record
+      </button>
+    </aside>
+  )
 }
 
 function WorkflowHeading({ eyebrow, title, description, step, onBack }) {
@@ -244,13 +640,129 @@ function LegacyOriginalDocumentScreen({ onNext }) {
   return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · MK-1048" title="Original documents" description="Review the source document submitted through the patient kiosk." step="1" onBack={() => {}} /><div className="document-layout"><section className="surface-card document-preview"><div className="document-toolbar"><span><Icons.FileText /> {recordDocument.name}</span><div><button className="icon-action" aria-label="Download document" onClick={handleDownload}><Icons.Download /></button><button className="icon-action" aria-label="More document actions"><Icons.More /></button></div></div><div className="document-sheet"><div className="document-sheet-head"><strong>MediKiosk Patient Intake</strong><span>INTAKE ID: MK-1048</span></div><div className="document-line wide" /><div className="document-line" /><div className="document-line short" /><div className="document-block"><span>Patient information</span><b>Rahul Sharma · 32 years · Male</b><p>Mobile: 9876543210</p></div><div className="document-block"><span>Chief complaint</span><b>Fever and headache since yesterday</b><p>Patient describes an acute onset of symptoms.</p></div><div className="document-block"><span>Medical history</span><b>No known allergies reported</b><p>Current medication: Paracetamol 500 mg as needed</p></div><div className="document-signature">Submitted through patient kiosk · {recordDocument.uploaded}</div></div></section><aside className="surface-card document-meta"><span className="status-pill processed"><Icons.Check /> {recordDocument.status}</span><h2>Source document</h2><p>Uploaded by the patient and processed for clinical review.</p><div className="meta-row"><span>Document type</span><strong>{recordDocument.type}</strong></div><div className="meta-row"><span>Pages</span><strong>{recordDocument.pages} pages</strong></div><div className="meta-row"><span>File size</span><strong>{recordDocument.size}</strong></div><div className="meta-row"><span>Uploaded</span><strong>{recordDocument.uploaded}</strong></div><div className="processing-note"><Icons.Sparkles /><span>Text extraction completed<br /><small>Ready to verify against the original</small></span></div></aside></div><WorkflowFooter nextLabel="Review extracted information" onNext={onNext} /></div>
 }
 
-function OriginalDocuments({ onNext }) {
-  const recordDocument = mockClinicalRecord.document
-  const handleDownload = () => downloadFile('Rahul_Sharma_intake.txt', originalDocumentContent(recordDocument), 'text/plain;charset=utf-8')
-  return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · MK-1048" title="Original documents" description="Review the source document submitted through the patient kiosk." step="1" onBack={() => {}} /><div className="document-layout"><section className="surface-card document-preview"><div className="document-toolbar"><span><Icons.FileText /> {recordDocument.name}</span><div><button className="icon-action" aria-label="Download document" onClick={handleDownload}><Icons.Download /></button><button className="icon-action" aria-label="More document actions" onClick={handleDownload}><Icons.More /></button></div></div><div className="document-sheet"><div className="document-sheet-head"><strong>MediKiosk Patient Intake</strong><span>INTAKE ID: MK-1048</span></div><div className="document-line wide" /><div className="document-line" /><div className="document-line short" /><div className="document-block"><span>Patient information</span><b>Rahul Sharma · 32 years · Male</b><p>Mobile: 9876543210</p></div><div className="document-block"><span>Chief complaint</span><b>Fever and headache since yesterday</b><p>Patient describes an acute onset of symptoms.</p></div><div className="document-block"><span>Medical history</span><b>No known allergies reported</b><p>Current medication: Paracetamol 500 mg as needed</p></div><div className="document-signature">Submitted through patient kiosk · {recordDocument.uploaded}</div></div></section><aside className="surface-card document-meta"><span className="status-pill processed"><Icons.Check /> {recordDocument.status}</span><h2>Source document</h2><p>Uploaded by the patient and processed for clinical review.</p><div className="meta-row"><span>Document type</span><strong>{recordDocument.type}</strong></div><div className="meta-row"><span>Pages</span><strong>{recordDocument.pages} pages</strong></div><div className="meta-row"><span>File size</span><strong>{recordDocument.size}</strong></div><div className="meta-row"><span>Uploaded</span><strong>{recordDocument.uploaded}</strong></div><div className="processing-note"><Icons.Sparkles /><span>Text extraction completed<br /><small>Ready to verify against the original</small></span></div></aside></div><WorkflowFooter nextLabel="Review extracted information" onNext={onNext} /></div>
+function OriginalDocuments({ patient, documents = [], onNext }) {
+  const recordDocument = documents[0]
+  const documentName = recordDocument?.document_type || 'Patient document'
+
+  const handleDownload = () => {
+    if (!recordDocument) return
+
+    downloadFile(
+      `${documentName.replace(/\.[^.]+$/, '')}.txt`,
+      originalDocumentContent(recordDocument),
+      "text/plain;charset=utf-8"
+    )
+  }
+
+  return (
+    <div className="workspace-content">
+      <WorkflowHeading
+        eyebrow={`PATIENT RECORD · ${patient?.id || 'SELECTED PATIENT'}`}
+        title="Original documents"
+        description={`Review the document submitted by ${patient?.name || 'the selected patient'}.`}
+        step="1"
+        onBack={() => {}}
+      />
+
+      <div className="document-layout">
+        <section className="surface-card document-preview">
+          <div className="document-toolbar">
+            <span>
+              <Icons.FileText /> {documentName}
+            </span>
+
+            <div>
+              <button
+                className="icon-action"
+                aria-label="Download document"
+                onClick={handleDownload}
+              >
+                <Icons.Download />
+              </button>
+
+              <button
+                className="icon-action"
+                aria-label="More document actions"
+                onClick={handleDownload}
+              >
+                <Icons.More />
+              </button>
+            </div>
+          </div>
+
+          <div className="document-sheet">
+  {recordDocument?.file_url ? (
+    <iframe
+      src={recordDocument.file_url}
+      width="100%"
+      height="500"
+      title="Patient Document"
+      style={{ border: "none", borderRadius: "12px" }}
+    />
+  ) : (
+    <p>No document found.</p>
+  )}
+</div>
+        </section>
+
+        <aside className="surface-card document-meta">
+          <span className="status-pill processed">
+            <Icons.Check /> Processed
+          </span>
+
+          <h2>{patient?.name || 'Selected patient'}</h2>
+          <p>{patient?.age || 'Unknown'} years · {patient?.gender || 'Unknown'} · {patient?.concern || 'No chief complaint recorded'}</p>
+
+          <div className="meta-row">
+            <span>Patient ID</span>
+            <strong>{patient?.id || 'Unknown'}</strong>
+          </div>
+
+          <div className="meta-row">
+            <span>Chief complaint</span>
+            <strong>{patient?.concern || 'Not recorded'}</strong>
+          </div>
+
+          <div className="meta-row">
+            <span>Document type</span>
+            <strong>{recordDocument?.document_type || 'Patient document'}</strong>
+          </div>
+
+          <div className="meta-row">
+            <span>Pages</span>
+            <strong>{recordDocument?.page_count || 'Unknown'} pages</strong>
+          </div>
+
+          <div className="meta-row">
+            <span>File size</span>
+            <strong>{recordDocument?.file_size || 'Unknown'}</strong>
+          </div>
+
+          <div className="meta-row">
+            <span>Uploaded</span>
+            <strong>{recordDocument?.uploaded_at ? new Date(recordDocument.uploaded_at).toLocaleString() : 'Unknown'}</strong>
+          </div>
+
+          <div className="processing-note">
+            <Icons.Sparkles />
+            <span>
+              Text extraction completed
+              <br />
+              <small>Ready to verify against the original</small>
+            </span>
+          </div>
+        </aside>
+      </div>
+
+      <WorkflowFooter
+        nextLabel="Review extracted information"
+        onNext={onNext}
+      />
+    </div>
+  )
 }
 
-function ExtractedInformation({ fields, onFieldsChange, focusField, onFocusHandled, onNext, onBack }) {
+function ExtractedInformation({ patient, fields, onFieldsChange, focusField, onFocusHandled, onNext, onBack }) {
   const [editingLabel, setEditingLabel] = useState(null)
   const [draftValue, setDraftValue] = useState('')
 
@@ -275,15 +787,15 @@ function ExtractedInformation({ fields, onFieldsChange, focusField, onFocusHandl
     setEditingLabel(null)
   }
 
-  return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · MK-1048" title="Extracted information" description="AI-extracted fields from the original patient document." step="2" onBack={onBack} /><div className="extracted-layout"><section className="surface-card extracted-card"><div className="card-heading"><div><h2>Recognized patient information</h2><p>Review the extracted values before comparison.</p></div><span className="status-pill processed"><Icons.Check /> 7 fields found</span></div><div className="extracted-list">{fields.map((field) => <div className="extracted-row" key={field.label}><div><span>{field.label}</span>{editingLabel === field.label ? <input className="extracted-edit-input" aria-label={`Edit value for ${field.label}`} value={draftValue} onChange={(event) => setDraftValue(event.target.value)} /> : <strong>{field.value}</strong>}<small><Icons.FileText /> {field.source} {field.doctorEdited && <em className="doctor-edited">Doctor Edited</em>}</small></div><span className="confidence"><i style={{ width: `${field.confidence}%` }} />{field.confidence}%</span>{editingLabel === field.label ? <button className="icon-action" aria-label={`Save ${field.label}`} onClick={() => saveField(field.label)}><Icons.Check /></button> : <button className="icon-action" aria-label={`Edit ${field.label}`} onClick={() => startEditing(field)}><Icons.Edit /></button>}</div>)}</div></section><aside className="surface-card extraction-summary"><span className="summary-icon"><Icons.Scan /></span><h2>Extraction quality</h2><strong>94.7%</strong><p>Average confidence across recognized fields</p><div className="quality-bar"><span /></div><div className="quality-row"><span>High confidence</span><b>5 fields</b></div><div className="quality-row"><span>Needs review</span><b>2 fields</b></div></aside></div><WorkflowFooter nextLabel="Compare with original" onNext={onNext} /></div>
+  return <div className="workspace-content"><WorkflowHeading eyebrow={`PATIENT RECORD · ${patient?.id || 'SELECTED PATIENT'}`} title="Extracted information" description="AI-extracted fields from the original patient document." step="2" onBack={onBack} /><div className="extracted-layout"><section className="surface-card extracted-card"><div className="card-heading"><div><h2>Recognized patient information</h2><p>Review the extracted values before comparison.</p></div><span className="status-pill processed"><Icons.Check /> {fields.length} fields found</span></div><div className="extracted-list">{fields.map((field) => <div className="extracted-row" key={field.label}><div><span>{field.label}</span>{editingLabel === field.label ? <input className="extracted-edit-input" aria-label={`Edit value for ${field.label}`} value={draftValue} onChange={(event) => setDraftValue(event.target.value)} /> : <strong>{field.value}</strong>}<small><Icons.FileText /> {field.source} {field.doctorEdited && <em className="doctor-edited">Doctor Edited</em>}</small></div><span className="confidence"><i style={{ width: `${field.confidence}%` }} />{field.confidence}%</span>{editingLabel === field.label ? <button className="icon-action" aria-label={`Save ${field.label}`} onClick={() => saveField(field.label)}><Icons.Check /></button> : <button className="icon-action" aria-label={`Edit ${field.label}`} onClick={() => startEditing(field)}><Icons.Edit /></button>}</div>)}</div></section><aside className="surface-card extraction-summary"><span className="summary-icon"><Icons.Scan /></span><h2>Extraction quality</h2><strong>{fields.length ? `${Math.round(fields.reduce((total, field) => total + field.confidence, 0) / fields.length)}%` : 'N/A'}</strong><p>Average confidence across recognized fields</p><div className="quality-bar"><span /></div><div className="quality-row"><span>High confidence</span><b>{fields.filter((field) => field.confidence >= 90).length} fields</b></div><div className="quality-row"><span>Needs review</span><b>{fields.filter((field) => field.confidence < 90).length} fields</b></div></aside></div><WorkflowFooter nextLabel="Compare with original" onNext={onNext} /></div>
 }
 
-function CompareInformation({ fields, hasComparison, onNext, onBack, onReviewField }) {
+function CompareInformation({ fields, comparisonRows, hasComparison, onNext, onBack, onReviewField }) {
   if (!hasComparison) {
     return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · SELECTED PATIENT" title="Compare information" description="Validate extracted values against the original document." step="3" onBack={onBack} /><section className="surface-card comparison-empty-state"><span className="summary-icon"><Icons.GitCompare /></span><h2>No previous comparison is available for this patient.</h2><p>Complete document extraction and verification before comparing this patient's information.</p><button className="primary-action" onClick={onBack}><Icons.ArrowLeft /> Back to extracted information</button></section></div>
   }
-  const comparisonRows = mockClinicalRecord.comparison.map((item) => ({ ...item, extracted: fields.find((field) => field.label === item.field)?.value || item.extracted }))
-  return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · MK-1048" title="Compare information" description="Validate extracted values against the original document." step="3" onBack={onBack} /><div className="comparison-card surface-card"><div className="comparison-header"><span>FIELD</span><span>ORIGINAL DOCUMENT</span><span>EXTRACTED INFORMATION</span><span>STATUS</span></div>{comparisonRows.map((item) => <div className="comparison-row" key={item.field}><strong>{item.field}</strong><span>{item.original}</span><span>{item.extracted}</span><span className={`comparison-status ${item.status}`}><Icons.Check /> {item.status === 'match' ? 'Match' : 'Review'}</span></div>)}</div><div className="comparison-callout"><Icons.AlertCircle /><span><strong>One field needs a quick review.</strong> Medication formatting differs slightly, but the meaning appears consistent.</span><button className="quiet-button" onClick={onReviewField}><Icons.Edit /> Review field</button></div><WorkflowFooter nextLabel="Generate clinical summary" onNext={onNext} /></div>
+  const reviewCount = comparisonRows.filter((item) => item.status === 'review').length
+  return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · SELECTED PATIENT" title="Compare information" description="Validate extracted values against the original document." step="3" onBack={onBack} /><div className="comparison-card surface-card"><div className="comparison-header"><span>FIELD</span><span>ORIGINAL DOCUMENT</span><span>EXTRACTED INFORMATION</span><span>STATUS</span></div>{comparisonRows.map((item) => <div className="comparison-row" key={item.field}><strong>{item.field}</strong><span>{item.original}</span><span>{item.extracted}</span><span className={`comparison-status ${item.status}`}><Icons.Check /> {item.status === 'match' ? 'Match' : 'Review'}</span></div>)}</div>{reviewCount > 0 && <div className="comparison-callout"><Icons.AlertCircle /><span><strong>{reviewCount} {reviewCount === 1 ? 'field needs' : 'fields need'} a quick review.</strong> Compare the document value with the extracted information before continuing.</span><button className="quiet-button" onClick={onReviewField}><Icons.Edit /> Review field</button></div>}<WorkflowFooter nextLabel="Generate clinical summary" onNext={onNext} /></div>
 }
 
 function LegacyClinicalSummaryActions({ onBack }) {
@@ -294,15 +806,144 @@ function LegacyClinicalSummaryActions({ onBack }) {
   return <div className="workspace-content"><WorkflowHeading eyebrow="PATIENT RECORD · MK-1048" title="Clinical summary" description="A concise review of the patient's submitted information." step="4" onBack={onBack} /><div className="summary-layout"><section className="surface-card clinical-summary-card"><div className="summary-card-top"><div><span className="status-pill ready"><Icons.Check /> Verified record</span><h2>Rahul Sharma</h2><p>32 years · Male · MK-1048</p></div><button className="secondary-action" onClick={handleDownload}><Icons.Download /> Download summary</button></div><div className="summary-overview"><span>CLINICAL OVERVIEW</span><p>{summary.overview}</p></div><div className="summary-columns"><SummaryList title="Key findings" items={summary.keyFindings} /><SummaryList title="Suggested checks" items={summary.suggestedChecks} /></div><div className="summary-signoff"><span>Generated from verified patient intake</span><time>{summary.generatedAt}</time></div></section><aside className="surface-card next-actions"><h2>Next actions</h2><p>This summary is ready to support your consultation.</p><button className="primary-action"><Icons.Clipboard /> Start consultation</button><button className="secondary-action"><Icons.Edit /> Add doctor notes</button><button className="quiet-button" onClick={onBack}><Icons.GitCompare /> Re-open comparison</button></aside></div></div>
 }
 
-function ClinicalSummary({ patient, savedNote, onStartConsultation, onAddNotes, onReopenComparison, onBack }) {
-  const { summary } = mockClinicalRecord
-  const patientOverview = patient.id === mockClinicalRecord.patientId
-    ? summary.overview
-    : `${patient.name} is a ${patient.age}-year-old ${patient.gender} presenting with ${patient.concern.toLowerCase()}.`
-  const summaryContent = `MediKiosk Clinical Summary\nPatient: ${patient.name}\nAge: ${patient.age} years\nGender: ${patient.gender}\nIntake ID: ${patient.id}\n\nClinical overview\n${patientOverview}\n\nDoctor notes\n${savedNote || 'No doctor notes added.'}\n\nKey findings\n${summary.keyFindings.map((item) => `- ${item}`).join('\n')}\n\nSuggested checks\n${summary.suggestedChecks.map((item) => `- ${item}`).join('\n')}\n\nGenerated from verified patient intake\n${summary.generatedAt}\n`
-  const handleDownload = () => downloadFile(`${patient.name.replace(/\s+/g, '_')}_clinical_summary.txt`, summaryContent, 'text/plain;charset=utf-8')
+function ClinicalSummary({
+  patient,
+  medicines = [],
+  summary: summaryData,
+  savedNote,
+  onStartConsultation,
+  onAddNotes,
+  onReopenComparison,
+  onBack
+}) {
+  const summary = summaryData || { overview: '', keyFindings: [], suggestedChecks: [], generatedAt: 'Available now' }
+  const patientMedicines = Array.isArray(medicines) ? medicines : []
 
-  return <div className="workspace-content"><WorkflowHeading eyebrow={`PATIENT RECORD · ${patient.id}`} title="Clinical summary" description="A concise review of the patient's submitted information." step="4" onBack={onBack} /><div className="summary-layout"><section className="surface-card clinical-summary-card"><div className="summary-card-top"><div><span className="status-pill ready"><Icons.Check /> Verified record</span><h2>{patient.name}</h2><p>{patient.age} years · {patient.gender} · {patient.id}</p></div><button className="secondary-action" onClick={handleDownload}><Icons.Download /> Download summary</button></div><div className="summary-overview"><span>CLINICAL OVERVIEW</span><p>{patientOverview}</p></div>{savedNote && <div className="summary-overview doctor-note-preview"><span>DOCTOR NOTES</span><p>{savedNote}</p></div>}<div className="summary-columns"><SummaryList title="Key findings" items={summary.keyFindings} /><SummaryList title="Suggested checks" items={summary.suggestedChecks} /></div><div className="summary-signoff"><span>Generated from verified patient intake</span><time>{summary.generatedAt}</time></div></section><aside className="surface-card next-actions"><h2>Next actions</h2><p>This summary is ready to support your consultation.</p><button className="primary-action" onClick={onStartConsultation}><Icons.Clipboard /> Start consultation</button><button className="secondary-action" onClick={onAddNotes}><Icons.Edit /> {savedNote ? 'Edit doctor notes' : 'Add doctor notes'}</button><button className="quiet-button" onClick={onReopenComparison}><Icons.GitCompare /> Re-open comparison</button></aside></div></div>
+  const patientOverview =
+    summary.overview || `${patient.name} is a ${patient.age}-year-old ${patient.gender} presenting with ${patient.concern.toLowerCase()}.`
+
+  const summaryContent = `MediKiosk Clinical Summary
+Patient: ${patient.name}
+Age: ${patient.age} years
+Gender: ${patient.gender}
+Intake ID: ${patient.id}
+
+Clinical overview
+${patientOverview}
+
+Doctor notes
+${savedNote || "No doctor notes added."}
+
+Medicines
+${
+  patientMedicines.length
+    ? patientMedicines
+        .map(
+          (med) =>
+            `- ${med.medicine_name} (${med.dosage}) - ${med.frequency} - ${med.duration}`
+        )
+        .join("\n")
+    : "No medicines found."
+}
+
+Generated from verified patient intake
+${summary.generatedAt}
+`
+
+  const handleDownload = () =>
+    downloadFile(
+      `${patient.name.replace(/\s+/g, "_")}_clinical_summary.txt`,
+      summaryContent,
+      "text/plain;charset=utf-8"
+    )
+
+  return (
+    <div className="workspace-content">
+      <WorkflowHeading
+        eyebrow={`PATIENT RECORD · ${patient.id}`}
+        title="Clinical summary"
+        description="A concise review of the patient's submitted information."
+        step="4"
+        onBack={onBack}
+      />
+
+      <div className="summary-layout">
+        <section className="surface-card clinical-summary-card">
+          <div className="summary-card-top">
+            <div>
+              <span className="status-pill ready">
+                <Icons.Check /> Verified record
+              </span>
+              <h2>{patient.name}</h2>
+              <p>
+                {patient.age} years · {patient.gender} · {patient.id}
+              </p>
+            </div>
+
+            <button className="secondary-action" onClick={handleDownload}>
+              <Icons.Download /> Download summary
+            </button>
+          </div>
+
+          <div className="summary-overview">
+            <span>CLINICAL OVERVIEW</span>
+            <p>{patientOverview}</p>
+          </div>
+
+          {savedNote && (
+            <div className="summary-overview doctor-note-preview">
+              <span>DOCTOR NOTES</span>
+              <p>{savedNote}</p>
+            </div>
+          )}
+
+          <div className="summary-columns">
+  <div className="summary-list">
+    <span>Medicines</span>
+
+    {patientMedicines.length ? (
+      patientMedicines.map((med) => (
+        <p key={med.medicine_id || `${med.medicine_name}-${med.dosage}`}>
+          <Icons.CheckCircle /> {med.medicine_name} ({med.dosage}) – {med.frequency} – {med.duration}
+        </p>
+      ))
+    ) : (
+      <p>No medicines found.</p>
+    )}
+  </div>
+
+  <SummaryList
+    title="Suggested checks"
+    items={summary.suggestedChecks}
+  />
+</div>
+
+          <div className="summary-signoff">
+            <span>Generated from verified patient intake</span>
+            <time>{summary.generatedAt}</time>
+          </div>
+        </section>
+
+        <aside className="surface-card next-actions">
+          <h2>Next actions</h2>
+          <p>This summary is ready to support your consultation.</p>
+
+          <button className="primary-action" onClick={onStartConsultation}>
+            <Icons.Clipboard /> Start consultation
+          </button>
+
+          <button className="secondary-action" onClick={onAddNotes}>
+            <Icons.Edit />{" "}
+            {savedNote ? "Edit doctor notes" : "Add doctor notes"}
+          </button>
+
+          <button className="quiet-button" onClick={onReopenComparison}>
+            <Icons.GitCompare /> Re-open comparison
+          </button>
+        </aside>
+      </div>
+    </div>
+  )
 }
 
 function Consultation({ patient, note, onBack }) {

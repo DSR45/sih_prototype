@@ -4,3 +4,4 @@ frontend/.vite_backup/
 frontend/node_modules_backup/
 frontend/package-lock_backup.json
 .obsidian/
+backend/supabase/functions/.env

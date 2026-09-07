@@ -4,6 +4,7 @@ import * as sessionService from './api/sessionService'
 import * as doctorService from './api/doctorService'
 import * as aiSummaryService from './api/aiSummaryService'
 import { supabase, isConfigured } from './supabase/client'
+import * as documentService from './api/documentService'
 
 // Supabase client now imported from centralized service
 
@@ -56,7 +57,23 @@ export const supabasePatientAdapter = {
 
   async submitSession(id) {
     return sessionService.submitSession(id)
-  }
+  },
+  async getPatientDetails(sessionId) {
+    return patientService.getPatientDetails(sessionId)
+  },
+  async getQuestionResponses(sessionId) {
+    return patientService.getQuestionResponses(sessionId);
+  },
+  async getSessionDocuments(sessionId) {
+    return documentService.getSessionDocuments(sessionId)
+  },
+
+  async getDocumentUrl(filePath) {
+    return documentService.getDocumentUrl(filePath)
+  },
+  async getMedicines(documentId) {
+    return patientService.getMedicines(documentId);
+  },
 }
 
 export const supabaseDoctorAdapter = {
@@ -74,9 +91,14 @@ export const supabaseDoctorAdapter = {
     return sessions.map(item => ({
       id: item.patient_id,
       name: item.patients?.full_name || 'Patient',
+      age: item.patients?.age,
+      gender: item.patients?.gender,
       concern: item.chief_complaint || 'General review',
       status: item.status === 'reviewed' ? 'Completed' : 'Ready',
-      sessionId: item.session_id
+      sessionId: item.session_id,
+      wait: item.visit_date ? new Date(item.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending',
+      time: item.visit_date ? new Date(item.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending',
+      severity: item.red_flag ? 'high' : 'moderate'
     }))
   },
 
