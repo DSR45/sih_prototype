@@ -105,6 +105,17 @@ function normalizeMedicines(document, medicineRows) {
   })).filter((medicine) => medicine.medicine_name) : []
 }
 
+function normalizeDoctorProfile(profile) {
+  const name = profile?.name || profile?.full_name || 'Dr. Ananya Mehta'
+  return {
+    ...profile,
+    name,
+    specialty: profile?.specialty || profile?.specialization || 'General Medicine',
+    initials: profile?.initials || name.split(/[ .]/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'AM',
+    clinic: profile?.clinic || profile?.hospital_name || 'Sunrise Health Clinic'
+  }
+}
+
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown'
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -123,6 +134,35 @@ function getDocumentType(document, blob) {
   if (extension === 'png') return 'PNG image'
   if (extension === 'jpg' || extension === 'jpeg') return 'JPG image'
   return document?.document_type || 'Document'
+}
+
+function getOriginalFilename(document, fileUrl, blob, response) {
+  const contentDisposition = response?.headers.get('content-disposition') || ''
+  const dispositionMatch = contentDisposition.match(/filename\*?=(?:UTF-8''|\"?)([^;\"]+)/i)
+  const urlPath = fileUrl?.split('?')[0]?.split('/').pop()
+  const candidates = [
+    dispositionMatch?.[1],
+    document?.original_filename,
+    document?.file_name,
+    document?.name,
+    urlPath
+  ]
+
+  const filename = candidates
+    .filter(Boolean)
+    .map((candidate) => decodeURIComponent(candidate).trim())
+    .find((candidate) => /\.[a-z0-9]{2,5}$/i.test(candidate))
+
+  if (filename) return filename
+
+  const extensionByType = {
+    'application/pdf': 'pdf',
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg'
+  }
+  const extension = extensionByType[blob?.type?.toLowerCase()] || 'bin'
+  return `patient-document.${extension}`
 }
 
 function getPatientFieldValue(field, patient, sessionDetails) {
@@ -173,7 +213,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
   const [notifications, setNotifications] = useState(initialNotifications)
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [doctor, setDoctor] = useState({ name: 'Doctor', specialty: 'General Medicine', clinic: 'MediKiosk Care Centre', initials: 'DR' })
+  const [doctor, setDoctor] = useState({ name: 'Dr. Ananya Mehta', specialty: 'General Medicine', clinic: 'Sunrise Health Clinic', initials: 'AM' })
   const [savedNotes, setSavedNotes] = useState(() => JSON.parse(localStorage.getItem('medikiosk-doctor-notes') || '{}'))
   const [extractedFields, setExtractedFields] = useState([])
   const [reviewField, setReviewField] = useState(null)
@@ -186,13 +226,31 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
   const headerActionsRef = useRef(null)
 
   useEffect(() => {
+    if (!window.history.state?.doctorView) {
+      window.history.replaceState({ doctorView: 'overview' }, '', window.location.href)
+    }
+
+    const handleBrowserBack = (event) => {
+      setActiveView(event.state?.doctorView || 'overview')
+    }
+
+    window.addEventListener('popstate', handleBrowserBack)
+    return () => window.removeEventListener('popstate', handleBrowserBack)
+  }, [])
+
+  const navigateTo = (view) => {
+    window.history.pushState({ doctorView: view }, '', window.location.href)
+    setActiveView(view)
+  }
+
+  useEffect(() => {
     async function loadDoctorWorkspaceData() {
       try {
         const [profile, queue] = await Promise.all([
           supabaseDoctorAdapter.getDoctorProfile(),
           supabaseDoctorAdapter.getQueue()
         ])
-        setDoctor(profile)
+        setDoctor(normalizeDoctorProfile(profile))
         const groupedQueue = groupQueueByPatient(queue)
         setQueueItems(groupedQueue)
         setSelectedPatient(groupedQueue[0] || null)
@@ -320,7 +378,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
 
   const selectPatient = (patient) => {
     setSelectedPatient(patient)
-    setActiveView('patients')
+    navigateTo('patients')
   }
 
   const selectSession = (session, patient) => {
@@ -330,6 +388,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
       sessions: patient.sessions,
       visitCount: patient.visitCount
     })
+    navigateTo('session')
   }
 
   return (
@@ -340,7 +399,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
         <nav className="workspace-nav" aria-label="Doctor workspace navigation">
           <p>WORKSPACE</p>
           {navItems.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={activeView === id ? 'active' : ''} onClick={() => setActiveView(id)}>
+            <button key={id} className={activeView === id ? 'active' : ''} onClick={() => navigateTo(id)}>
               <Icon /><span>{label}</span>{id === 'patients' && <b>{activePatientCount}</b>}
             </button>
           ))}
@@ -367,21 +426,22 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
           </div>
         </header>
 
-        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => setActiveView('patients')} queueItems={queueItems} activityItems={queueItems.slice(0, 3)} />}
-        {activeView === 'patients' && (<PatientQueue selectedPatient={selectedPatient} onSelectPatient={selectPatient} onSelectSession={selectSession} onOpenRecord={() => setActiveView('documents')} queueItems={queueItems} questionResponses={questionResponses}/>)}
+        {activeView === 'overview' && <Overview onSelectPatient={selectPatient} onQueue={() => navigateTo('patients')} queueItems={queueItems} activityItems={queueItems.slice(0, 3)} />}
+        {activeView === 'patients' && (<PatientQueue selectedPatient={selectedPatient} onSelectPatient={selectPatient} onSelectSession={selectSession} onOpenRecord={() => navigateTo('session')} queueItems={queueItems} questionResponses={questionResponses}/>)}
+        {activeView === 'session' && selectedPatient && <SessionDetails patient={selectedPatient} onNavigate={navigateTo} />}
         {activeView === 'documents' && (
   <OriginalDocuments
     patient={selectedPatient}
     documents={documents}
-    onNext={() => setActiveView('extracted')}
+    onNext={() => navigateTo('extracted')}
   />
 )}
-        {activeView === 'extracted' && <ExtractedInformation patient={selectedPatient} fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => setActiveView('compare')} onBack={() => setActiveView('documents')} />}
-        {activeView === 'compare' && <CompareInformation fields={extractedFields} comparisonRows={comparisonRows} hasComparison={comparisonRows.length > 0} onNext={() => setActiveView('summary')} onBack={() => setActiveView('extracted')} onReviewField={() => { setReviewField(comparisonRows.find((row) => row.status === 'review')?.field || null); setActiveView('extracted') }} />}
-        {activeView === 'summary' && selectedPatient && <ClinicalSummary patient={selectedPatient} medicines={medicines} summary={summary} savedNote={savedNotes[selectedPatient.id] || ""} onStartConsultation={() => { setConsultationPatient(selectedPatient); setActiveView("consultation");}} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => setActiveView("compare")} onBack={() => setActiveView("compare")}/>}
-        {activeView === 'consultation' && <Consultation patient={consultationPatient || selectedPatient} note={savedNotes[selectedPatient.id] || ''} onBack={() => setActiveView('summary')} />}
+        {activeView === 'extracted' && <ExtractedInformation patient={selectedPatient} fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => navigateTo('compare')} onBack={() => navigateTo('documents')} />}
+        {activeView === 'compare' && <CompareInformation fields={extractedFields} comparisonRows={comparisonRows} hasComparison={comparisonRows.length > 0} onNext={() => navigateTo('summary')} onBack={() => navigateTo('extracted')} onReviewField={() => { setReviewField(comparisonRows.find((row) => row.status === 'review')?.field || null); navigateTo('extracted') }} />}
+        {activeView === 'summary' && selectedPatient && <ClinicalSummary patient={selectedPatient} medicines={medicines} summary={summary} savedNote={savedNotes[selectedPatient.id] || ""} onStartConsultation={() => { setConsultationPatient(selectedPatient); navigateTo("consultation");}} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => navigateTo("compare")} onBack={() => navigateTo("compare")}/>}
+        {activeView === 'consultation' && <Consultation patient={consultationPatient || selectedPatient} note={savedNotes[selectedPatient.id] || ''} onBack={() => navigateTo('summary')} />}
         {activeView === 'reports' && <Reports />}
-        {activeView === 'settings' && <Settings doctor={doctor} onSave={setDoctor} />}
+        {activeView === 'settings' && <DoctorProfile doctor={doctor} queueItems={queueItems} />}
       </section>
       {showAccountSwitcher && <AccountSwitcher currentDoctor={doctor} onClose={() => setShowAccountSwitcher(false)} onSelect={(account) => { setDoctor(account); setShowAccountSwitcher(false) }} />}
       {showLogoutConfirm && <LogoutConfirmation onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />}
@@ -752,6 +812,52 @@ function WorkflowFooter({ nextLabel, onNext }) {
   return <div className="workflow-footer"><span><Icons.Lock /> Patient data is protected and ready for review</span><button className="primary-action" onClick={onNext}>{nextLabel}<Icons.ArrowRight /></button></div>
 }
 
+function SessionDetails({ patient, onNavigate }) {
+  const visitIndex = patient.sessions?.findIndex((session) => session.sessionId === patient.sessionId) ?? 0
+  const visitNumber = patient.sessions?.length ? patient.sessions.length - visitIndex : 1
+  const visitDate = patient.visit_date ? new Date(patient.visit_date).toLocaleString() : 'Visit time unavailable'
+
+  return (
+    <div className="workspace-content session-details-page">
+      <PageHeading
+        eyebrow={`PATIENT SESSION · ${patient.id}`}
+        title={`Visit session for ${patient.name}`}
+        description="Choose a record section to review for this specific visit."
+        action={<button className="secondary-action" onClick={() => onNavigate('patients')}><Icons.ArrowLeft /> Visit history</button>}
+      />
+      <div className="summary-layout">
+        <section className="surface-card clinical-summary-card session-record-card">
+          <div className="summary-card-top">
+            <div>
+              <span className="status-pill ready"><Icons.Check /> {patient.status}</span>
+              <h2>{patient.name}</h2>
+              <p>{patient.age} years · {patient.gender} · {patient.id}</p>
+            </div>
+          </div>
+          <div className="session-record-grid">
+            <div className="session-record-item"><span>Patient ID</span><strong>{patient.id}</strong></div>
+            <div className="session-record-item"><span>Visit Number</span><strong>Visit #{visitNumber}</strong></div>
+            <div className="session-record-item"><span>Date</span><strong>{visitDate}</strong></div>
+            <div className="session-record-item"><span>Department</span><strong>{patient.department || 'General Medicine'}</strong></div>
+            <div className="session-record-item"><span>Chief Complaint</span><strong>{patient.concern || 'Not recorded'}</strong></div>
+            <div className="session-record-item"><span>Language</span><strong>{patient.language_used || 'Not recorded'}</strong></div>
+            <div className="session-record-item"><span>Status</span><strong>{patient.status}</strong></div>
+          </div>
+          <div className="summary-columns session-record-actions">
+            <div className="summary-list">
+              <span>RECORD SECTIONS</span>
+              <button className="quiet-button" onClick={() => onNavigate('documents')}><Icons.FileText /> Original Documents</button>
+              <button className="quiet-button" onClick={() => onNavigate('extracted')}><Icons.Scan /> Extracted Information</button>
+              <button className="quiet-button" onClick={() => onNavigate('compare')}><Icons.GitCompare /> Compare Information</button>
+              <button className="quiet-button" onClick={() => onNavigate('summary')}><Icons.Clipboard /> Clinical Summary</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
 function LegacyOriginalDocumentScreen({ onNext }) {
   const recordDocument = mockClinicalRecord.document
   const handleDownload = () => downloadFile('Rahul_Sharma_intake.txt', originalDocumentContent(recordDocument), 'text/plain;charset=utf-8')
@@ -761,17 +867,17 @@ function LegacyOriginalDocumentScreen({ onNext }) {
 
 function OriginalDocuments({ patient, documents = [], onNext }) {
   const recordDocument = documents[0]
-  const [metadata, setMetadata] = useState({ status: 'idle', type: '', size: '', pages: null, previewUrl: '' })
+  const [metadata, setMetadata] = useState({ status: 'idle', type: '', size: '', pages: null, previewUrl: '', filename: '' })
 
   useEffect(() => {
     if (!recordDocument?.file_url) {
-      setMetadata({ status: 'idle', type: '', size: '', pages: null, previewUrl: '' })
+      setMetadata({ status: 'idle', type: '', size: '', pages: null, previewUrl: '', filename: '' })
       return undefined
     }
 
     let cancelled = false
     let objectUrl = ''
-    setMetadata({ status: 'loading', type: '', size: '', pages: null, previewUrl: '' })
+    setMetadata({ status: 'loading', type: '', size: '', pages: null, previewUrl: '', filename: '' })
 
     async function loadMetadata() {
       try {
@@ -797,7 +903,8 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
             type,
             size: formatFileSize(blob.size),
             pages,
-            previewUrl: objectUrl
+            previewUrl: objectUrl,
+            filename: getOriginalFilename(recordDocument, recordDocument.file_url, blob, response)
           })
         }
       } catch (error) {
@@ -815,14 +922,34 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
 
   const documentName = metadata.type || recordDocument?.document_type || 'Patient document'
 
-  const handleDownload = () => {
-    if (!recordDocument) return
+  const handleDownload = async () => {
+    if (!recordDocument?.file_url) return
 
-    downloadFile(
-      `${documentName.replace(/\.[^.]+$/, '')}.txt`,
-      originalDocumentContent(recordDocument),
-      "text/plain;charset=utf-8"
-    )
+    let downloadUrl = metadata.previewUrl
+    let shouldRevokeUrl = false
+    let filename = metadata.filename
+
+    try {
+      if (!downloadUrl || !filename) {
+        const response = await fetch(recordDocument.file_url)
+        if (!response.ok) throw new Error(`Document download failed: ${response.status}`)
+        const blob = await response.blob()
+        filename = filename || getOriginalFilename(recordDocument, recordDocument.file_url, blob, response)
+        downloadUrl = URL.createObjectURL(blob)
+        shouldRevokeUrl = true
+      }
+
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename || 'patient-document'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      if (shouldRevokeUrl) URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.warn("Couldn't download the original document:", error)
+    }
   }
 
   return (
@@ -861,14 +988,18 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
             </div>
           </div>
 
-          <div className="document-sheet">
-          {metadata.previewUrl ? (
-    <iframe
+          <div className="document-sheet document-viewer">
+          {metadata.previewUrl ? metadata.type === 'PNG image' || metadata.type === 'JPG image' ? (
+    <img
+      className="document-image"
       src={metadata.previewUrl}
-      width="100%"
-      height="500"
+      alt={`${documentName} preview`}
+    />
+          ) : (
+    <iframe
+      className="document-pdf"
+      src={metadata.previewUrl}
       title="Patient Document"
-      style={{ border: "none", borderRadius: "12px" }}
     />
           ) : metadata.status === 'loading' ? (
             <p>Loading document...</p>
@@ -1149,18 +1280,53 @@ function LegacyClinicalSummary({ onBack }) {
 
 function SummaryList({ title, items }) { return <div className="summary-list"><span>{title}</span>{items.map((item) => <p key={item}><Icons.CheckCircle /> {item}</p>)}</div> }
 function Reports() { return <div className="workspace-content"><PageHeading eyebrow="INSIGHTS" title="Reports" description="Understand your clinic's intake and consultation trends." /><div className="report-grid"><div className="surface-card report-large"><h2>Patient volume</h2><p>Consultations completed this week</p><div className="fake-chart"><span style={{ height: '48%' }} /><span style={{ height: '67%' }} /><span style={{ height: '54%' }} /><span style={{ height: '82%' }} /><span style={{ height: '72%' }} /><span style={{ height: '94%' }} /><span style={{ height: '76%' }} /></div><div className="chart-labels"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div><div className="surface-card report-summary"><h2>This month</h2><strong>186</strong><p>total patient intakes</p><div className="report-rule" /><span className="report-up">↑ 14.8%</span><small>compared with last month</small></div></div></div> }
-function Settings({ doctor, onSave }) {
-  const [profile, setProfile] = useState(doctor)
-  const [saved, setSaved] = useState(false)
-  const updateProfile = (field, value) => {
-    setProfile((current) => ({ ...current, [field]: value }))
-    setSaved(false)
+function DoctorProfile({ doctor, queueItems }) {
+  const today = new Date()
+  const sessions = queueItems.flatMap((patient) => patient.sessions || [patient])
+  const isToday = (session) => {
+    if (!session.visit_date) return false
+    const date = new Date(session.visit_date)
+    return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate()
   }
-  const saveProfile = () => {
-    onSave({ ...profile, initials: profile.name.split(/[ .]/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() })
-    setSaved(true)
+  const sessionsToday = sessions.filter(isToday)
+  const uniquePatientsToday = new Set(sessionsToday.map((session) => session.patientId || session.patient_id || session.id).filter(Boolean)).size
+  const activePatients = new Set(queueItems.filter((patient) => !['completed', 'reviewed'].includes(String(patient.status).toLowerCase())).map((patient) => patient.patientId || patient.id).filter(Boolean)).size
+  const completedToday = new Set(sessionsToday.filter((session) => ['completed', 'reviewed'].includes(String(session.status).toLowerCase())).map((session) => session.patientId || session.patient_id || session.id).filter(Boolean)).size
+  const profile = {
+    name: 'Dr. Ananya Mehta',
+    specialty: 'General Medicine',
+    initials: 'AM',
+    doctorId: doctor.doctor_id || doctor.id,
+    hospital: 'Sunrise Health Clinic',
+    department: 'General Medicine',
+    experience: '10+ Years',
+    email: 'dr.ananya@sunrisehealthclinic.in',
+    phone: '+91 80123 45678',
+    about: 'Consultant physician with 10+ years of experience in General Medicine, specializing in outpatient consultations, preventive care, and patient-centered treatment.'
   }
-  return <div className="workspace-content"><PageHeading eyebrow="PREFERENCES" title="Settings" description="Manage your workspace and notification preferences." /><div className="surface-card settings-card"><h2>Profile details</h2><p>These details are shown to your clinic team.</p><label>Full name<input value={profile.name} onChange={(event) => updateProfile('name', event.target.value)} /></label><label>Specialty<input value={profile.specialty} onChange={(event) => updateProfile('specialty', event.target.value)} /></label><label>Clinic<input value={profile.clinic} onChange={(event) => updateProfile('clinic', event.target.value)} /></label><button className="primary-action" onClick={saveProfile}>{saved ? 'Changes saved' : 'Save changes'}</button></div></div>
+  const valueOrFallback = (value) => value || 'Not Available'
+
+  return <div className="workspace-content doctor-profile-page">
+    <PageHeading eyebrow="DOCTOR PROFILE" title={profile.name} description="Professional profile and today's clinical activity." />
+    <div className="doctor-profile-layout">
+      <section className="surface-card doctor-profile-card">
+        <div className="doctor-profile-header">
+          <span className="doctor-profile-avatar">{profile.initials}</span>
+          <div><h2>{profile.name}</h2><p>{profile.specialty}</p><span className="status-pill ready"><Icons.Check /> Available</span></div>
+        </div>
+        <div className="doctor-profile-fields">
+          <div><span>Doctor ID</span><strong>{valueOrFallback(doctor.doctor_id || doctor.id)}</strong></div>
+          <div><span>Hospital / Clinic</span><strong>{profile.hospital}</strong></div>
+          <div><span>Email</span><strong>{profile.email}</strong></div>
+          <div><span>Phone</span><strong>{profile.phone}</strong></div>
+          <div><span>Department</span><strong>{profile.department}</strong></div>
+          <div><span>Experience</span><strong>{profile.experience}</strong></div>
+        </div>
+        <div className="doctor-profile-about"><span>ABOUT</span><p>{profile.about}</p></div>
+      </section>
+      <aside className="surface-card doctor-summary-card"><h2>Today's Summary</h2><div className="doctor-summary-metrics"><div><strong>{uniquePatientsToday}</strong><span>Unique patients seen</span></div><div><strong>{activePatients}</strong><span>Active patients waiting</span></div><div><strong>{completedToday}</strong><span>Sessions completed</span></div></div></aside>
+    </div>
+  </div>
 }
 
 export default DoctorDashboard
