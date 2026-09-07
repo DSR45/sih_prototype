@@ -1,13 +1,15 @@
-import { LanguageProvider } from './context/LanguageContext'
-import Header from './components/Header'
-import ProgressBar from './components/ProgressBar'
-import DemoLanding from './pages/DemoLanding'
-import { PATIENT_FLOW } from './constants/patientFlow'
+import { useEffect } from 'react'
+import { LanguageProvider } from '@shared/contexts'
+import { Header, ProgressBar } from '@shared/components'
+import DemoLanding from '@shared/pages/DemoLanding'
+import { PATIENT_FLOW } from '@shared/constants'
+import { verifySetup, displaySetupStatus } from '@shared/utils/setupVerification'
 import PatientFlowRouter from './modules/patient/PatientFlowRouter'
 import DoctorWorkspaceRouter from './modules/doctor/DoctorWorkspaceRouter'
 import { usePatientFlow } from './modules/patient/hooks/usePatientFlow'
 import { useDoctorWorkspace } from './modules/doctor/hooks/useDoctorWorkspace'
 import './App.css'
+import './styles/compactLayout.css'
 
 function App() {
   const {
@@ -27,6 +29,15 @@ function App() {
 
   const { doctorLoggedIn, handleDoctorLogin, handleDoctorLogout } = useDoctorWorkspace()
 
+  // Verify Supabase setup on app load
+  useEffect(() => {
+    async function checkSetup() {
+      const status = await verifySetup()
+      displaySetupStatus(status)
+    }
+    checkSetup()
+  }, [])
+
   const handleDoctorFlowLogin = async (credentials) => {
     const loggedIn = await handleDoctorLogin(credentials)
     if (loggedIn !== false) {
@@ -40,21 +51,10 @@ function App() {
   const handleDoctorFlowLogout = () => {
     handleDoctorLogout()
     setUserType(null)
-    setCurrentScreen(PATIENT_FLOW.WELCOME)
+    setCurrentScreen(PATIENT_FLOW.LANGUAGE_SELECTION)
   }
 
   const renderScreen = () => {
-    if (currentScreen === 0) {
-      return (
-        <Welcome
-          onNavigate={handleNavigate}
-          onLanguageChange={handleLanguageChange}
-          onUpdateData={handleUpdateData}
-          patientData={patientData}
-        />
-      )
-    }
-
     if (currentScreen === -1 || (currentScreen === -2 && doctorLoggedIn)) {
       return (
         <DoctorWorkspaceRouter
@@ -64,11 +64,11 @@ function App() {
           onLogout={handleDoctorFlowLogout}
           onBack={() => {
             setUserType(null)
-            setCurrentScreen(PATIENT_FLOW.WELCOME)
+            setCurrentScreen(PATIENT_FLOW.LANGUAGE_SELECTION)
           }}
           onPatientAccess={() => {
             setUserType('patient')
-            setCurrentScreen(PATIENT_FLOW.WELCOME)
+            setCurrentScreen(PATIENT_FLOW.LANGUAGE_SELECTION)
           }}
         />
       )
@@ -91,8 +91,8 @@ function App() {
     return <DemoLanding onNavigate={handleDemoChoice} />
   }
 
-  const showHeader = currentScreen > 0 && currentScreen !== -1 && currentScreen !== -2
-  const showProgressBar = currentScreen > 0
+    const showHeader = currentScreen >= PATIENT_FLOW.PATIENT_INFO && currentScreen !== -1 && currentScreen !== -2
+    const showProgressBar = currentScreen >= PATIENT_FLOW.PATIENT_INFO
 
   return (
     <LanguageProvider language={language} onLanguageChange={handleLanguageChange}>

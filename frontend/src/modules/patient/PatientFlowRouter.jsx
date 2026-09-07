@@ -1,10 +1,14 @@
-import Welcome from '../../pages/Welcome'
-import PatientLogin from '../../pages/PatientLogin'
-import PatientInformation from '../../pages/PatientInformation'
-import ChiefComplaint from '../../components/ChiefComplaint'
-import SymptomAssessment from '../../pages/SymptomAssessment'
-import PatientWorkflow from '../../pages/PatientWorkflow'
-import { PATIENT_FLOW } from '../../constants/patientFlow'
+import {
+  WelcomePage,
+  LanguageSelectionPage as LanguageSelection,
+  PatientLoginPage as PatientLogin,
+  PatientInformationPage as PatientInformation,
+  PatientDetailsPage as PatientDetails,
+  PatientWorkflowPage as PatientWorkflow,
+  SymptomAssessmentPage as SymptomAssessment
+} from './pages'
+import { ChiefComplaint } from './components'
+import { PATIENT_FLOW } from '@shared/constants'
 
 function PatientFlowRouter({
   currentScreen,
@@ -16,9 +20,9 @@ function PatientFlowRouter({
   onLanguageChange
 }) {
   switch (currentScreen) {
-    case PATIENT_FLOW.WELCOME:
+    case PATIENT_FLOW.LANGUAGE_SELECTION:
       return (
-        <Welcome
+        <LanguageSelection
           onNavigate={onNavigate}
           onLanguageChange={onLanguageChange}
           onUpdateData={onUpdateData}
@@ -32,6 +36,14 @@ function PatientFlowRouter({
           onNavigate={onNavigate}
           onUpdateData={onUpdateData}
           onDoctorLogin={() => onNavigate(-1)}
+        />
+      )
+    case PATIENT_FLOW.PATIENT_DETAILS:
+      return (
+        <PatientDetails
+          patientData={patientData}
+          onNavigate={onNavigate}
+          onUpdateData={onUpdateData}
         />
       )
     case PATIENT_FLOW.PATIENT_INFO:

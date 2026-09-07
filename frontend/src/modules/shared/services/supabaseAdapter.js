@@ -1,26 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+// Adapter using centralized services
+import * as patientService from './api/patientService'
+import * as sessionService from './api/sessionService'
+import * as doctorService from './api/doctorService'
+import * as aiSummaryService from './api/aiSummaryService'
+import { supabase, isConfigured } from './supabase/client'
 
-const browserEnv = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {}
-const nodeEnv = typeof process !== 'undefined' && process.env ? process.env : {}
-
-const supabaseUrl = browserEnv.VITE_SUPABASE_URL || nodeEnv.VITE_SUPABASE_URL
-const supabaseAnonKey = browserEnv.VITE_SUPABASE_ANON_KEY || nodeEnv.VITE_SUPABASE_ANON_KEY
-
-const isConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  !supabaseUrl.includes('your-project') &&
-  !supabaseAnonKey.includes('your-anon-key')
-)
-
-const supabase = isConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false
-      }
-    })
-  : null
+// Supabase client now imported from centralized service
 
 const mockPatientSession = {
   id: 'session_mock_001',
@@ -50,222 +35,60 @@ async function fallbackToMock(operation, fallbackValue) {
 
 export const supabasePatientAdapter = {
   async getPatientByPhone(phone) {
-    if (!supabase) {
-      const normalized = (phone || '').replace(/\D/g, '')
-      return normalized ? { patient_id: 'MK-10001', full_name: 'Rahul Sharma', phone: normalized, preferred_language: 'English' } : null
-    }
-
-    const { data, error } = await supabase
-      .from('patients')
-      .select('*')
-      .ilike('phone', `%${String(phone || '').replace(/\D/g, '')}%`)
-      .limit(1)
-      .maybeSingle()
-
-    if (error) {
-      throw error
-    }
-
-    return data
+    return patientService.searchPatientByPhone(phone)
   },
 
   async registerPatient(payload) {
-    if (!supabase) {
-      return {
-        patient_id: 'MK-10001',
-        full_name: payload.full_name,
-        age: payload.age,
-        gender: payload.gender,
-        phone: payload.phone,
-        preferred_language: payload.preferred_language || 'English'
-      }
-    }
-
-    const { data, error } = await supabase
-      .from('patients')
-      .insert([
-        {
-          full_name: payload.full_name,
-          age: Number(payload.age),
-          gender: payload.gender,
-          phone: payload.phone,
-          preferred_language: payload.preferred_language || 'English'
-        }
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
-
-    return data
+    return patientService.registerPatient(payload)
   },
 
   async getSessionById(id) {
-    if (!supabase) {
-      return mockPatientSession
-    }
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('session_id', id)
-      .maybeSingle()
-
-    if (error) {
-      throw error
-    }
-
-    return data || mockPatientSession
+    return sessionService.getSessionById(id)
   },
 
   async createSession(payload) {
-    if (!supabase) {
-      return { ...mockPatientSession, ...payload, id: payload.id || mockPatientSession.id }
-    }
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .insert([
-        {
-          patient_id: payload.patient_id,
-          chief_complaint: payload.chief_complaint,
-          complaint_category: payload.complaint_category || 'General',
-          department: payload.department || 'General Medicine',
-          language_used: payload.language_used || 'English',
-          consent_given: Boolean(payload.consent_given),
-          status: payload.status || 'in_progress'
-        }
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
-
-    return data
+    return sessionService.createSession(payload)
   },
 
   async updateSession(id, updates) {
-    if (!supabase) {
-      return { id, ...updates }
-    }
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .update(updates)
-      .eq('session_id', id)
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
-
-    return data
+    return sessionService.updateSession(id, updates)
   },
 
   async submitSession(id) {
-    return this.updateSession(id, { status: 'submitted' })
+    return sessionService.submitSession(id)
   }
 }
 
 export const supabaseDoctorAdapter = {
   async signInDoctor(email, password) {
-    if (!supabase) {
-      return { user: { email }, session: { access_token: 'demo-doctor-token' }, demo: true }
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      throw error
-    }
-
-    return data
+    return doctorService.loginDoctor(email, password)
   },
 
   async getDoctorProfile() {
-    if (!supabase) {
-      return mockDoctorProfile
-    }
-
-    const { data, error } = await supabase
-      .from('doctors')
-      .select('*')
-      .limit(1)
-      .maybeSingle()
-
-    if (error) {
-      throw error
-    }
-
-    return data || mockDoctorProfile
+    const currentDoctor = await doctorService.getCurrentDoctor()
+    return currentDoctor?.doctor || mockDoctorProfile
   },
 
   async getQueue() {
-    if (!supabase) {
-      return [
-        { id: 'MK-1048', name: 'Rahul Sharma', concern: 'Fever and headache', status: 'Ready' },
-        { id: 'MK-1047', name: 'Priya Nair', concern: 'Persistent cough', status: 'Waiting' }
-      ]
-    }
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*, patients(full_name, patient_id)')
-      .in('status', ['submitted', 'reviewed'])
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      throw error
-    }
-
-    return (data || []).map((item) => ({
+    const sessions = await doctorService.getSubmittedSessions()
+    return sessions.map(item => ({
       id: item.patient_id,
       name: item.patients?.full_name || 'Patient',
       concern: item.chief_complaint || 'General review',
-      status: item.status === 'reviewed' ? 'Completed' : 'Ready'
+      status: item.status === 'reviewed' ? 'Completed' : 'Ready',
+      sessionId: item.session_id
     }))
   },
 
   async reviewSummary(sessionId, summary) {
-    if (!supabase) {
-      return { sessionId, summary, status: 'reviewed' }
-    }
-
-    const { data, error } = await supabase
-      .from('ai_summaries')
-      .update({ doctor_summary: summary, doctor_edited: true })
-      .eq('session_id', sessionId)
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
-
+    const data = await aiSummaryService.updateDoctorSummary(sessionId, summary)
     return { ...data, sessionId, status: 'reviewed' }
   },
 
   async approveSummary(sessionId) {
-    if (!supabase) {
-      return { sessionId, status: 'approved' }
-    }
-
-    const { data, error } = await supabase
-      .from('sessions')
-      .update({ status: 'reviewed' })
-      .eq('session_id', sessionId)
-      .select()
-      .single()
-
-    if (error) {
-      throw error
-    }
-
+    const currentDoctor = await doctorService.getCurrentDoctor()
+    const doctorId = currentDoctor?.doctor?.doctor_id || null
+    const data = await aiSummaryService.approveSummary(sessionId, doctorId)
     return { ...data, sessionId, status: 'approved' }
   }
 }

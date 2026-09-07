@@ -1,5 +1,7 @@
-import DoctorDashboard from '../../pages/DoctorDashboard'
-import DoctorLogin from '../../pages/DoctorLogin'
+import {
+  DoctorLoginPage as DoctorLogin,
+  DoctorDashboardPage as DoctorDashboard
+} from './pages'
 
 function DoctorWorkspaceRouter({ currentScreen, doctorLoggedIn, onLogin, onLogout, onBack, onPatientAccess }) {
   if (currentScreen === -1) {

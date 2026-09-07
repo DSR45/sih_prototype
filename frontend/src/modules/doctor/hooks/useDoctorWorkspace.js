@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { supabaseDoctorAdapter } from '../../shared/services/supabaseAdapter'
+import { supabaseDoctorAdapter } from '@shared/services/supabaseAdapter'
 
 export function useDoctorWorkspace() {
   const [doctorLoggedIn, setDoctorLoggedIn] = useState(false)

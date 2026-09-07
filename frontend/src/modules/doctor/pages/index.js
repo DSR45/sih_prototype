@@ -1,2 +1,3 @@
-export { default as DoctorLogin } from '../../../pages/DoctorLogin'
-export { default as DoctorDashboard } from '../../../pages/DoctorDashboard'
+// Barrel export for doctor pages
+export { default as DoctorLoginPage } from './DoctorLoginPage'
+export { default as DoctorDashboardPage } from './DoctorDashboardPage'

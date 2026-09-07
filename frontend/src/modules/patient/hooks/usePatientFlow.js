@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getInitialWorkflow } from '../../../pages/PatientWorkflow'
-import { PATIENT_FLOW } from '../../../constants/patientFlow'
+import { getInitialWorkflow } from '../pages/PatientWorkflowPage'
+import { PATIENT_FLOW } from '@shared/constants'
 import { createDefaultPatientData, getLanguageLabel } from '../state/patientState'
 
 const persistedState = (() => {
@@ -13,8 +13,7 @@ const persistedState = (() => {
 
 export function usePatientFlow() {
   const [currentScreen, setCurrentScreen] = useState(() => {
-    const savedScreen = persistedState?.currentScreen
-    return savedScreen === 0 ? PATIENT_FLOW.WELCOME : savedScreen ?? PATIENT_FLOW.WELCOME
+    return 0
   })
   const [userType, setUserType] = useState(null)
   const [language, setLanguage] = useState(() => localStorage.getItem('medikiosk-language') || 'en')
@@ -32,7 +31,7 @@ export function usePatientFlow() {
   const handleDemoChoice = useCallback((type) => {
     setUserType(type)
     if (type === 'patient') {
-      setCurrentScreen(PATIENT_FLOW.WELCOME)
+      setCurrentScreen(PATIENT_FLOW.LANGUAGE_SELECTION)
     } else if (type === 'doctor') {
       setCurrentScreen(-1)
     }
