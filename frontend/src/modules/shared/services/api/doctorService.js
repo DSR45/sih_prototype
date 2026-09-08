@@ -171,6 +171,7 @@ export async function getSubmittedSessions() {
         )
       `)
       .eq('status', 'submitted')
+      .in('status', ['in_progress', 'submitted'])
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -286,4 +287,13 @@ export async function getSessionForReview(sessionId) {
     console.error('❌ Error getting session for review:', error)
     throw error
   }
+}
+export async function getSessionDocuments(sessionId) {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("session_id", sessionId)
+
+  if (error) throw error
+  return data || []
 }

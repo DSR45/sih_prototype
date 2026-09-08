@@ -19,4 +19,3 @@ export const PATIENT_PROGRESS_STEPS = [
   { key: 'SYMPTOM_ASSESSMENT', screen: PATIENT_FLOW.SYMPTOM_ASSESSMENT, titleKey: 'symptomAssessment' },
   { key: 'DOCUMENTS', screen: PATIENT_FLOW.DOCUMENTS, titleKey: 'documents' }
 ]
-

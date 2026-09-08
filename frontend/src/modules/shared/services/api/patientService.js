@@ -99,3 +99,117 @@ export async function getPatientById(patientId) {
     throw error
   }
 }
+/**
+ * Get complete patient details for a doctor using session ID
+ */
+export async function getPatientDetails(sessionId) {
+  if (!isConfigured) {
+    return {
+      patient: MOCK_PATIENT,
+      session: {
+        session_id: sessionId,
+        chief_complaint: "Demo complaint",
+        department: "General Medicine",
+        language_used: "English"
+      },
+      medical_history: null,
+      question_responses: []
+    };
+  }
+
+  try {
+    // Get session + patient
+    const { data: session, error: sessionError } = await supabase
+      .from("sessions")
+      .select(`
+        *,
+        patients (
+          patient_id,
+          full_name,
+          age,
+          gender,
+          phone,
+          preferred_language
+        )
+      `)
+      .eq("session_id", sessionId)
+      .single();
+
+    if (sessionError) throw sessionError;
+
+    // Get medical history
+    const { data: medicalHistory } = await supabase
+      .from("medical_history")
+      .select("*")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    // Get question responses
+    const { data: questionResponses } = await supabase
+      .from("question_responses")
+      .select("*")
+      .eq("session_id", sessionId);
+
+    const { data: aiSummary } = await supabase
+      .from("ai_summaries")
+      .select("*")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    return {
+      patient: session.patients,
+      session,
+      medical_history: medicalHistory,
+      question_responses: questionResponses || [],
+      ai_summary: aiSummary
+    };
+  } catch (error) {
+    console.error("❌ Error getting patient details:", error);
+    throw error;
+  }
+}
+/**
+ * Get all question responses for a session
+ */
+export async function getQuestionResponses(sessionId) {
+  if (!isConfigured) {
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("question_responses")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error("❌ Error getting question responses:", error);
+    throw error;
+  }
+}
+/**
+ * Get medicines extracted from a document
+ */
+export async function getMedicines(documentId) {
+  if (!isConfigured) {
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("medicines")
+      .select("*")
+      .eq("document_id", documentId);
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error("❌ Error getting medicines:", error);
+    throw error;
+  }
+}

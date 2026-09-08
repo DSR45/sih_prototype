@@ -27,6 +27,27 @@ function validateSummary(summary) {
   }
 }
 
+export function createMockCaseSummary(patientData = {}) {
+  const complaint = String(patientData.chiefComplaint || 'Unspecified health concern').trim()
+  const urgent = /chest pain|difficulty breathing|shortness of breath|confusion|severe bleeding|बेहोशी|सांस लेने में कठिनाई|सीने में दर्द/i.test(complaint)
+
+  const summary = {
+    summary: `Patient reported: ${complaint}. This locally generated draft requires professional review.`,
+    keySymptoms: [complaint],
+    relevantHistory: [],
+    documentFindings: [],
+    redFlags: urgent ? [complaint] : [],
+    missingInformation: ['Further clinical history and physical examination are required.'],
+    priority: urgent ? 'urgent' : 'normal',
+    priorityReason: urgent
+      ? 'The complaint may include a warning symptom and requires prompt professional review.'
+      : 'No urgent warning symptom was identified from the chief complaint alone.'
+  }
+
+  console.warn('[Case Summary] Using local fallback summary:', summary)
+  return summary
+}
+
 export async function generateCaseSummaryOnce({ sessionId, patientData, onProgress }) {
   const reportProgress = (step, message) => {
     console.log(`[Case Summary] ${step}: ${message}`)
