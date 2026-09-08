@@ -2,7 +2,7 @@ export const translations = {
   en: {
     // Header
     header: {
-      appName: "MediKiosk",
+      appName: "CaseConnect",
       appTagline: "Smart patient intake before your doctor visit"
     },
 
@@ -13,7 +13,7 @@ export const translations = {
       visualDescription: "A focused workspace for clinicians to review patient context and make every consultation count.",
       noteTitle: "Built for confident decisions",
       noteDescription: "Secure patient intake, organized for the people who provide care.",
-      visualFooter: "MediKiosk Health Systems  /  Secure clinical access",
+      visualFooter: "CaseConnect Health Systems  /  Secure clinical access",
       kicker: "DOCTOR PORTAL",
       title: "Welcome back",
       subtitle: "Sign in to access your clinical workspace.",
@@ -38,7 +38,7 @@ export const translations = {
     
     // Screen 1 - Welcome
     welcome: {
-      title: "Welcome to MediKiosk",
+      title: "Welcome to CaseConnect",
       subtitle: "Intelligent Healthcare Intake System",
       description: "Tell us about your health concerns before meeting your doctor.",
       feature1: "Quick & Efficient",
@@ -338,7 +338,7 @@ export const translations = {
       step2UrgentText: "Do not wait for this demo flow if you feel unsafe.",
       step2RoutineTitle: "Meet a healthcare professional",
       step2RoutineText: "Discuss your concern and questions with the care team.",
-      disclaimer: "MediKiosk provides intake support only. It does not diagnose or replace professional medical advice.",
+      disclaimer: "CaseConnect provides intake support only. It does not diagnose or replace professional medical advice.",
       back: "Back",
       continueUrgent: "Seek Immediate Medical Care",
       continueRoutine: "Continue to Consultation"
@@ -370,7 +370,7 @@ export const translations = {
   hi: {
     // Header
     header: {
-      appName: "MediKiosk",
+      appName: "CaseConnect",
       appTagline: "डॉक्टर से पहले स्मार्ट रोगी जानकारी"
     },
 
@@ -381,7 +381,7 @@ export const translations = {
       visualDescription: "डॉक्टरों के लिए रोगी की जानकारी देखने और हर परामर्श को बेहतर बनाने का केंद्रित कार्यक्षेत्र।",
       noteTitle: "आत्मविश्वास से निर्णय लें",
       noteDescription: "सुरक्षित रोगी जानकारी, देखभाल करने वालों के लिए व्यवस्थित।",
-      visualFooter: "MediKiosk Health Systems  /  सुरक्षित क्लिनिकल एक्सेस",
+      visualFooter: "CaseConnect Health Systems  /  सुरक्षित क्लिनिकल एक्सेस",
       kicker: "डॉक्टर पोर्टल",
       title: "वापसी पर स्वागत है",
       subtitle: "अपने क्लिनिकल कार्यक्षेत्र में जाने के लिए साइन इन करें।",
@@ -406,7 +406,7 @@ export const translations = {
 
     // Screen 1 - Welcome
     welcome: {
-      title: "MediKiosk में आपका स्वागत है",
+      title: "CaseConnect में आपका स्वागत है",
       subtitle: "बुद्धिमान स्वास्थ्य सेवा प्रणाली",
       description: "डॉक्टर से मिलने से पहले हमें अपनी स्वास्थ्य संबंधी समस्याओं के बारे में बताएं।",
       feature1: "तेज़ और कुशल",
@@ -681,7 +681,7 @@ export const translations = {
       step2UrgentText: "यदि आप असुरक्षित महसूस करते हैं तो इस डेमो फ्लो का इंतजार न करें।",
       step2RoutineTitle: "एक स्वास्थ्य पेशेवर से मिलें",
       step2RoutineText: "देखभाल टीम के साथ अपनी चिंता और प्रश्नों पर चर्चा करें।",
-      disclaimer: "MediKiosk केवल सेवन सहायता प्रदान करता है। यह निदान नहीं करता है या पेशेवर चिकित्सा सलाह को प्रतिस्थापित नहीं करता है।",
+      disclaimer: "CaseConnect केवल सेवन सहायता प्रदान करता है। यह निदान नहीं करता है या पेशेवर चिकित्सा सलाह को प्रतिस्थापित नहीं करता है।",
       back: "वापस",
       continueUrgent: "तत्काल चिकित्सा देखभाल लें",
       continueRoutine: "परामर्श के लिए जारी रखें"

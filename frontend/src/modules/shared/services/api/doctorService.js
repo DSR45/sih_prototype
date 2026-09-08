@@ -170,6 +170,7 @@ export async function getSubmittedSessions() {
           phone
         )
       `)
+      .eq('status', 'submitted')
       .in('status', ['in_progress', 'submitted'])
       .order('created_at', { ascending: false })
 

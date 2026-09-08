@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react'
 import { Icons } from '@shared/components/Icons'
-import { uploadDocument, deleteDocument } from '@shared/services/api/documentService'
+import {
+  uploadDocument,
+  deleteDocument,
+  updateDocumentOCR
+} from '@shared/services/api/documentService'
+import { extractTextFromImage } from '@shared/services/api/ocrService'
 
 export function DocumentsScreen({ patientData, workflowData, updateWorkflow, onNavigate, t }) {
   const inputRef = useRef(null)
@@ -8,6 +13,8 @@ export function DocumentsScreen({ patientData, workflowData, updateWorkflow, onN
     (workflowData.documents || []).filter(document => document && document.name)
   )
   const [uploading, setUploading] = useState(false)
+  const [extractingText, setExtractingText] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
 
@@ -30,7 +37,54 @@ export function DocumentsScreen({ patientData, workflowData, updateWorkflow, onN
       
       for (const file of files) {
         const documentType = file.type === 'application/pdf' ? 'Prescription' : 'Lab Report'
+                console.log('[Documents] Uploading file:', {
+          name: file.name,
+          type: file.type,
+          sizeBytes: file.size
+        })
+
         const doc = await uploadDocument(patientData.sessionId, file, documentType)
+        console.log('[Documents] Upload completed:', {
+          name: file.name,
+          documentId: doc.document_id
+        })
+
+        let ocrResult = null
+        if (file.type.startsWith('image/')) {
+          console.log('[Documents] Starting OCR for image:', file.name)
+          try {
+            ocrResult = await extractTextFromImage(file, ocrProgress => {
+              console.log(`[Documents] OCR progress for ${file.name}: ${ocrProgress}%`)
+            })
+
+            console.log('[Documents] OCR result received:', {
+              name: file.name,
+              characters: ocrResult.text.length,
+              confidence: ocrResult.confidence
+            })
+
+            await updateDocumentOCR(
+              doc.document_id,
+              ocrResult.text,
+              { source: 'tesseract.js', fileName: file.name },
+              ocrResult.confidence
+            )
+
+            console.log('[Documents] OCR saved to database:', doc.document_id)
+                    } catch (ocrError) {
+            console.error('[Documents] OCR failed; upload remains available:', {
+              name: file.name,
+              error: ocrError
+            })
+          } finally {
+            setExtractingText(false)
+            setOcrProgress(100)
+            console.log('[Documents] Text extraction finished for:', file.name)
+          }
+        } else {
+          console.log('[Documents] PDF detected; client-side OCR skipped:', file.name)
+        }
+
         uploadedDocs.push({
           document_id: doc.document_id,
           id: doc.document_id,
@@ -102,11 +156,25 @@ export function DocumentsScreen({ patientData, workflowData, updateWorkflow, onN
         />
       </div>
 
-      {uploading && (
+            {uploading && (
         <div className="upload-progress">
           <span>{t.documents.uploadProgress}</span>
           <strong>{progress}%</strong>
           <div><i style={{ width: `${progress}%` }} /></div>
+        </div>
+      )}
+
+      {extractingText && (
+        <div className="ocr-loading-overlay" role="status" aria-live="polite">
+          <div className="ocr-loading-card">
+            <div className="ocr-spinner" aria-hidden="true" />
+            <h3>Extracting document text</h3>
+            <p>Please wait while Tesseract reads the uploaded image.</p>
+            <strong>{ocrProgress}%</strong>
+            <div className="ocr-progress-track">
+              <i style={{ width: `${ocrProgress}%` }} />
+            </div>
+          </div>
         </div>
       )}
 

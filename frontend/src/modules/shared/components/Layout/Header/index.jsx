@@ -15,7 +15,7 @@ function Header() {
             <span className="logo-icon">⊕</span>
           </div>
           <div className="logo-text">
-            <h1 className="logo-title">MediKiosk</h1>
+            <h1 className="logo-title">CaseConnect</h1>
             <p className="logo-subtitle">{t.header.appTagline}</p>
           </div>
         </div>

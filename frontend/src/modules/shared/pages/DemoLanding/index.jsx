@@ -22,7 +22,7 @@ function DemoLanding({ onNavigate }) {
             <div className="demo-logo">
               <Icons.Heart />
             </div>
-            <h1 className="demo-title">MediKiosk</h1>
+            <h1 className="demo-title">CaseConnect</h1>
             <p className="demo-subtitle">Intelligent Healthcare Pre-Consultation System</p>
             <p className="demo-description">Choose your access type to continue</p>
           </div>

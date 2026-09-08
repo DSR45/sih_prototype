@@ -71,8 +71,10 @@ function PatientFlowRouter({
           onUpdateData={onUpdateData}
         />
       )
-    case PATIENT_FLOW.DOCUMENTS:
+        case PATIENT_FLOW.DOCUMENTS:
     case PATIENT_FLOW.SUMMARY:
+    case PATIENT_FLOW.ASSESSMENT_RESULT:
+    case PATIENT_FLOW.NEXT_STEP:
     case PATIENT_FLOW.COMPLETION:
       return (
         <PatientWorkflow

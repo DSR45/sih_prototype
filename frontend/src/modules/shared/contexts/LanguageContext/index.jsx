@@ -1,26 +1,59 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect } from 'react'
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
+import { translations } from '../../constants/translations'
 
-const LanguageContext = createContext({ language: 'en', onLanguageChange: () => {} })
+const resources = Object.fromEntries(
+  Object.entries(translations).map(([language, value]) => [
+    language,
+    { translation: value }
+  ])
+)
+
+if (!i18n.isInitialized) {
+  i18n
+    .use(initReactI18next)
+    .init({
+      resources,
+      lng: localStorage.getItem('medikiosk-language') || 'en',
+      fallbackLng: 'en',
+      interpolation: { escapeValue: false },
+      react: { useSuspense: false }
+    })
+}
+
+const LanguageContext = createContext({
+  language: 'en',
+  onLanguageChange: () => {}
+})
 
 export function LanguageProvider({ children, language, onLanguageChange }) {
+  const activeLanguage = language === 'hi' ? 'hi' : 'en'
+
+  useEffect(() => {
+    if (i18n.language !== activeLanguage) {
+      i18n.changeLanguage(activeLanguage)
+    }
+  }, [activeLanguage])
+
   return (
-    <LanguageContext.Provider value={{ language: language || 'en', onLanguageChange }}>
+    <LanguageContext.Provider
+      value={{ language: activeLanguage, onLanguageChange, i18n }}
+    >
       {children}
     </LanguageContext.Provider>
   )
 }
 
 export function useLanguage() {
-  const context = useContext(LanguageContext)
-  if (!context) {
-    console.warn('useLanguage must be used within LanguageProvider')
-    return { language: 'en', onLanguageChange: () => {} }
+  return useContext(LanguageContext)
+}
+export function useTranslation() {
+  return {
+    t: i18n.t.bind(i18n),
+    i18n
   }
-  return context
 }
 
-export function useTranslation() {
-  const { language } = useLanguage()
-  const { translations } = require('../data/translations')
-  return translations[language] || translations.en
-}
+export { i18n }
+

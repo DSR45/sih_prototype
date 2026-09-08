@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
-import { uploadDocument, deleteDocument } from '@shared/services/api/documentService'
+import {
+  uploadDocument,
+  deleteDocument,
+  updateDocumentOCR
+} from '@shared/services/api/documentService'
+import { extractTextFromImage } from '@shared/services/api/ocrService'
+import { extractTextFromPdf } from '@shared/services/api/pdfOcrService'
+import { generateCaseSummaryOnce, createMockCaseSummary } from '@shared/services/api/caseSummaryService'
+import { supabase } from '@shared/services/supabase/client'
 import './styles.css'
 
 export function getInitialWorkflow() {
@@ -118,6 +126,8 @@ function DocumentsScreen({ patientData, workflowData, updateWorkflow, onNavigate
     (workflowData.documents || []).filter(document => document && document.name)
   )
   const [uploading, setUploading] = useState(false)
+  const [extractingText, setExtractingText] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
   const [progress, setProgress] = useState(0)
 
   const addFiles = async (fileList) => {
@@ -138,7 +148,73 @@ function DocumentsScreen({ patientData, workflowData, updateWorkflow, onNavigate
         for (let index = 0; index < files.length; index += 1) {
           const file = files[index]
           const documentType = file.type === 'application/pdf' ? 'Prescription' : 'Lab Report'
+                    console.log('[Documents] Uploading file:', {
+            name: file.name,
+            type: file.type,
+            sizeBytes: file.size
+          })
+
           const uploaded = await uploadDocument(patientData.sessionId, file, documentType)
+          console.log('[Documents] Upload completed:', {
+            name: file.name,
+            documentId: uploaded.document_id
+          })
+
+                    if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+            console.group(`[Documents/OCR] Processing ${file.name}`)
+            console.log('[Documents/OCR] File type:', file.type)
+            setExtractingText(true)
+            setOcrProgress(0)
+
+            try {
+              const progressHandler = value => {
+                setOcrProgress(value)
+                console.log(`[Documents/OCR] Progress for ${file.name}: ${value}%`)
+              }
+
+              const ocrResult = file.type === 'application/pdf'
+                ? await extractTextFromPdf(file, progressHandler)
+                : await extractTextFromImage(file, progressHandler)
+
+              console.log('[Documents/OCR] Extracted data:', {
+                fileName: file.name,
+                fileType: file.type,
+                pages: ocrResult.pages || 1,
+                text: ocrResult.text,
+                characterCount: ocrResult.text.length,
+                confidence: ocrResult.confidence
+              })
+
+              await updateDocumentOCR(
+                uploaded.document_id,
+                ocrResult.text,
+                {
+                  source: file.type === 'application/pdf' ? 'pdfjs+tesseract.js' : 'tesseract.js',
+                  fileName: file.name,
+                  pages: ocrResult.pages || 1
+                },
+                ocrResult.confidence
+              )
+
+              console.log('[Documents/OCR] Saved OCR data to backend:', uploaded.document_id)
+            } catch (ocrError) {
+              console.error('[Documents/OCR] Extraction failed:', {
+                fileName: file.name,
+                fileType: file.type,
+                error: ocrError
+              })
+            } finally {
+              setExtractingText(false)
+              setOcrProgress(100)
+              console.log('[Documents/OCR] Finished:', file.name)
+              console.groupEnd()
+            }
+          } else {
+            console.log('[Documents/OCR] Skipped unsupported file:', {
+              name: file.name,
+              type: file.type
+            })
+          }
 
           uploadedDocuments.push({
             ...uploaded,
@@ -202,11 +278,25 @@ function DocumentsScreen({ patientData, workflowData, updateWorkflow, onNavigate
           />
         </div>
 
-        {uploading && (
+                {uploading && (
           <div className="upload-progress">
             <span>{t.documents.uploadProgress}</span>
             <strong>{progress}%</strong>
             <div><i style={{ width: `${progress}%` }} /></div>
+          </div>
+        )}
+
+        {extractingText && (
+          <div className="ocr-loading-overlay" role="status" aria-live="polite">
+            <div className="ocr-loading-card">
+              <div className="ocr-spinner" aria-hidden="true" />
+              <h3>Extracting document text</h3>
+              <p>Please wait while Tesseract reads the uploaded image.</p>
+              <strong>{ocrProgress}%</strong>
+              <div className="ocr-progress-track">
+                <i style={{ width: `${ocrProgress}%` }} />
+              </div>
+            </div>
           </div>
         )}
       </Card>
@@ -344,8 +434,8 @@ function SummaryScreen({ patientData, workflowData, onNavigate }) {
 
       <ActionBar
         onBack={() => onNavigate(6)}
-        onPrimary={() => onNavigate(8)}
-        primaryLabel={t.summary.continue}
+                onPrimary={() => onNavigate(10)}
+        primaryLabel="Finish and prepare case"
         backLabel={t.summary.back}
       />
     </Layout>
@@ -492,38 +582,121 @@ function CompletionScreen({ patientData, workflowData, updateWorkflow, onNavigat
     console.error('CompletionScreen: Translations not loaded for language:', language)
     return <div>Loading translations...</div>
   }
-  const [loading, setLoading] = useState(true)
+    const [loading, setLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState('')
+  const [summaryStage, setSummaryStage] = useState('preparing')
+
+  const summarySteps = [
+    ['preparing', 'Prepare case data'],
+    ['checking', 'Check existing summary'],
+    ['loading', 'Load answers and OCR text'],
+    ['generating', 'Generate doctor summary'],
+    ['validating', 'Validate summary response'],
+    ['saving', 'Save summary for doctor review'],
+    ['submitting', 'Submit completed case'],
+    ['complete', 'Complete case']
+  ]
 
   useEffect(() => {
-    const timer = setTimeout(async () => {
+    let cancelled = false
+    const sessionId = patientData.sessionId || workflowData.sessionId
+
+    async function completeCase() {
       try {
-        const sessionId = patientData.sessionId || workflowData.sessionId
         if (sessionId) {
+                    console.log('[Case Summary] Starting completion flow:', { sessionId })
+          await generateCaseSummaryOnce({
+            sessionId,
+            patientData,
+            onProgress: step => setSummaryStage(step)
+          })
+
+          console.log('[Case Summary] Summary complete; submitting session:', sessionId)
+          setSummaryStage('submitting')
           await import('@shared/services/supabaseAdapter').then(({ supabasePatientAdapter }) =>
             supabasePatientAdapter.submitSession(sessionId)
           )
+          console.log('[Case Summary] Session submitted successfully:', sessionId)
+          setSummaryStage('complete')
         }
-      } catch (error) {
-        console.warn('Session submission to backend failed:', error)
-      }
+            } catch (error) {
+        console.error('[Case Summary] AI generation failed; creating fallback summary:', error)
+        try {
+          const fallbackSummary = createMockCaseSummary(patientData)
+          if (sessionId) {
+            setSummaryStage('saving')
+            const { data: fallbackSaved, error: fallbackSaveError } = await supabase
+              .from('ai_summaries')
+              .insert([{
+                session_id: sessionId,
+                ai_summary: JSON.stringify(fallbackSummary),
+                doctor_edited: false,
+                timeline_json: { source: 'local-fallback', generatedAt: new Date().toISOString() }
+              }])
+              .select()
+              .single()
 
-      setLoading(false)
-      updateWorkflow({ completedAt: new Date().toISOString(), sessionId: patientData.sessionId || workflowData.sessionId })
-    }, 650)
-    return () => clearTimeout(timer)
-  }, [patientData.sessionId, updateWorkflow, workflowData.sessionId])
+            if (fallbackSaveError) throw fallbackSaveError
+            console.warn('[Case Summary] Fallback summary saved:', fallbackSaved?.summary_id)
+            setSummaryStage('submitting')
+            await import('@shared/services/supabaseAdapter').then(({ supabasePatientAdapter }) =>
+              supabasePatientAdapter.submitSession(sessionId)
+            )
+            console.warn('[Case Summary] Session submitted with fallback summary:', sessionId)
+            setSummaryStage('complete')
+          }
+        } catch (fallbackError) {
+          console.error('[Case Summary] Fallback summary failed:', fallbackError)
+          if (!cancelled) setSummaryError('The summary could not be generated, but your original answers and documents are preserved.')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+          updateWorkflow({ completedAt: new Date().toISOString(), sessionId })
+        }
+      }
+    }
+
+    completeCase()
+    return () => { cancelled = true }
+  }, [patientData, patientData.sessionId, updateWorkflow, workflowData.sessionId])
 
   return (
     <Layout screen={10} title={t.completion.stepTitle}>
-      {loading ? (
-        <div className="loading-state">
-          <div className="spinner" />
+            {loading ? (
+                <div className="loading-state case-summary-loading">
           <span className="workflow-eyebrow">{t.completion.loadingEyebrow}</span>
-          <h1>{t.completion.loadingTitle}</h1>
+          <h1>Preparing your case summary</h1>
           <p>{t.completion.loadingText}</p>
+          <div className="summary-progress-timeline" role="status" aria-live="polite">
+            {summarySteps.map(([step, label], index) => {
+              const currentIndex = summarySteps.findIndex(([name]) => name === summaryStage)
+              const isComplete = index < currentIndex || summaryStage === 'complete'
+              const isActive = step === summaryStage
+
+              return (
+                <div className="summary-progress-step" key={step}>
+                  <div className={`summary-progress-marker ${isComplete ? 'complete' : ''} ${isActive ? 'active' : ''}`}>
+                    {isComplete ? '✓' : isActive ? <span className="summary-progress-spinner" /> : index + 1}
+                  </div>
+                  <div className={`summary-progress-label ${isActive ? 'active' : ''}`}>
+                    <strong>{label}</strong>
+                    {isActive && <small>In progress…</small>}
+                  </div>
+                  {index < summarySteps.length - 1 && <div className={`summary-progress-arrow ${isComplete ? 'complete' : ''}`}>↓</div>}
+                </div>
+              )
+            })}
+          </div>
         </div>
-      ) : (
+            ) : (
         <>
+          {summaryError && (
+            <div className="assessment-banner urgent" role="alert">
+              <strong>Summary unavailable</strong>
+              <span>{summaryError}</span>
+            </div>
+          )}
           <div className="result-state completion">
             <div className="result-mark">
               <Icons.CheckCircle />

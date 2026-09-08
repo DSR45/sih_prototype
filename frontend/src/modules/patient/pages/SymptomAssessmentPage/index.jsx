@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLanguage } from '@shared/contexts/LanguageContext'
 import { translations } from '@shared/constants/translations'
 import { Icons } from '@shared/components/Icons'
 import { isPilesComplaint } from '../PatientWorkflowPage'
 import { saveQuestionResponse } from '@shared/services/api/questionService'
+import { generateMedicalQuestions } from '@shared/services/api/medicalQuestionsService'
+import { getMockMedicalQuestions } from '@shared/services/mockMedicalQuestions'
 import './styles.css'
+
 
 function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
   const { language } = useLanguage()
@@ -122,8 +125,91 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
     }
   ]
 
-    const questions = pilesCase ? pilesQuestions : feverQuestions
+      const fallbackQuestions = pilesCase ? pilesQuestions : feverQuestions
+  const [generatedQuestions, setGeneratedQuestions] = useState(patientData.generatedQuestions || null)
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(!patientData.generatedQuestions?.length)
+  const [questionGenerationError, setQuestionGenerationError] = useState('')
   const [questionIndex, setQuestionIndex] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadQuestions() {
+            const cachedLanguage = patientData.generatedQuestionsMetadata?.language
+      const hasMatchingCachedQuestions = patientData.generatedQuestions?.length && cachedLanguage === language
+
+      if (!patientData.chiefComplaint?.trim() || hasMatchingCachedQuestions) {
+        setIsGeneratingQuestions(false)
+        return
+      }
+
+            console.log('[Medical Questions] Loading questions...')
+      setIsGeneratingQuestions(true)
+      setQuestionGenerationError('')
+
+      const mockQuestions = getMockMedicalQuestions({
+        complaint: patientData.chiefComplaint,
+        tags: patientData.complaintTags || [],
+        language
+      })
+
+      if (mockQuestions) {
+        console.log('[Medical Questions] Common complaint matched; using local mock questions. Gemini was not called.', {
+          language,
+          questionCount: mockQuestions.length
+        })
+        if (!cancelled) {
+          setGeneratedQuestions(mockQuestions)
+          onUpdateData({
+            generatedQuestions: mockQuestions,
+            generatedQuestionsMetadata: {
+              language,
+              source: 'local-mock',
+              timestamp: new Date().toISOString(),
+              totalQuestions: mockQuestions.length
+            }
+          })
+          setTimeout(() => {
+            if (!cancelled) setIsGeneratingQuestions(false)
+          }, 650)
+        }
+        return
+      }
+
+      console.log('[Medical Questions] No common complaint match; calling Gemini Edge Function...')
+
+      try {
+        const result = await generateMedicalQuestions({
+          chiefComplaint: patientData.chiefComplaint,
+          patientAge: patientData.age,
+          patientGender: patientData.gender,
+                    medicalHistory: patientData.medicalHistory,
+          language
+        })
+
+        if (!cancelled) {
+          console.log('[Medical Questions] Questions loaded successfully:', result)
+          setGeneratedQuestions(result.questions)
+          onUpdateData({
+            generatedQuestions: result.questions,
+            generatedQuestionsMetadata: result.metadata
+          })
+        }
+      } catch (generationError) {
+        console.error('[Medical Questions] Failed to load personalized questions:', generationError)
+        if (!cancelled) {
+          setQuestionGenerationError('Personalized questions could not be loaded. Standard questions will be used.')
+        }
+      } finally {
+        if (!cancelled) setIsGeneratingQuestions(false)
+      }
+    }
+
+    loadQuestions()
+    return () => { cancelled = true }
+  }, [patientData.chiefComplaint, patientData.age, patientData.gender, patientData.medicalHistory, patientData.generatedQuestions, patientData.generatedQuestionsMetadata, language, onUpdateData])
+
+  const questions = generatedQuestions?.length ? generatedQuestions : fallbackQuestions
   const [answers, setAnswers] = useState(patientData.assessmentAnswers || {})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -150,13 +236,19 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
       try {
         // Save current answer to backend
         if (patientData.sessionId) {
-          const answerValue = currentQuestion.multi 
-            ? selected.join(', ') 
-            : selected[0]
+                    const answerValue = currentQuestion.multi
+            ? selected.map(value => {
+                const displayIndex = currentQuestion.options.findIndex(([, optionValue]) => optionValue === value)
+                return currentQuestion.storageOptions?.[displayIndex]?.[0] || value
+              }).join(', ')
+            : (() => {
+                const displayIndex = currentQuestion.options.findIndex(([, optionValue]) => optionValue === selected[0])
+                return currentQuestion.storageOptions?.[displayIndex]?.[0] || selected[0]
+              })()
 
           await saveQuestionResponse(
             patientData.sessionId,
-            currentQuestion.question,
+            currentQuestion.storageQuestion || currentQuestion.question,
             answerValue,
             'Symptom Assessment'
           )
@@ -177,6 +269,22 @@ function SymptomAssessment({ patientData, onNavigate, onUpdateData }) {
         setSaving(false)
       }
     }
+
+    if (isGeneratingQuestions) {
+    return (
+      <div className="question-loading-overlay" role="status" aria-live="polite">
+        <div className="question-loading-card">
+          <div className="question-loading-spinner" aria-hidden="true" />
+          <h2>Preparing your questions</h2>
+          <p>Please wait while we create questions based on your complaint.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (questionGenerationError) {
+    console.warn('[Medical Questions] Using fallback questions:', questionGenerationError)
+  }
 
   if (complete) {
       console.log('SymptomAssessment complete. Saved answers:', answers)
