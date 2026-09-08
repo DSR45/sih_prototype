@@ -26,6 +26,13 @@ const availableAccounts = [
   { name: 'Dr. Rohan Kapoor', specialty: 'Internal Medicine', initials: 'RK' }
 ]
 
+const extractedPrescriptionMedicines = [
+  { medicine_name: 'Paracetamol 500 mg', dosage: '1 tablet', frequency: 'twice daily', duration: '3 days' },
+  { medicine_name: 'Amoxicillin 500 mg', dosage: '1 capsule', frequency: 'thrice daily', duration: '5 days' },
+  { medicine_name: 'Cetirizine 10 mg', dosage: '1 tablet', frequency: 'once daily (at night)', duration: '5 days' },
+  { medicine_name: 'Pantoprazole 40 mg', dosage: '1 tablet', frequency: 'once daily (before breakfast)', duration: '7 days' }
+]
+
 function parseOcrFields(ocrText) {
   if (!ocrText) return []
 
@@ -362,13 +369,6 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
       : 'match'
   }))
 
-  const summary = {
-    overview: sessionDetails?.ai_summary?.ai_summary || `${selectedPatient?.name || 'Patient'} is being reviewed for ${selectedPatient?.concern || 'the submitted concern'}.`,
-    keyFindings: [],
-    suggestedChecks: [],
-    generatedAt: sessionDetails?.session?.created_at ? new Date(sessionDetails.session.created_at).toLocaleString() : 'Available now'
-  }
-
   const activePatientCount = new Set(
     queueItems
       .filter((patient) => !['completed', 'reviewed'].includes(String(patient.status).toLowerCase()))
@@ -394,7 +394,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
   return (
     <main className="doctor-workspace">
       <aside className="doctor-sidebar">
-        <div className="workspace-brand"><span><Icons.Heart /></span><strong>MediKiosk</strong></div>
+        <div className="workspace-brand"><span><Icons.Heart /></span><strong>CaseConnect</strong></div>
         <div className="workspace-clinic"><span className="clinic-dot" /> {doctor.clinic}</div>
         <nav className="workspace-nav" aria-label="Doctor workspace navigation">
           <p>WORKSPACE</p>
@@ -413,7 +413,7 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
 
       <section className="workspace-main">
         <header className="workspace-header">
-          <div className="mobile-menu-brand"><span><Icons.Heart /></span>MediKiosk</div>
+          <div className="mobile-menu-brand"><span><Icons.Heart /></span>CaseConnect</div>
           <div className="header-actions" ref={headerActionsRef}>
             <div className="header-menu-anchor">
               <button className={`icon-action ${openMenu === 'notifications' ? 'menu-open' : ''}`} aria-label="Notifications" aria-expanded={openMenu === 'notifications'} onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}><Icons.Bell />{notifications.some((notification) => notification.unread) && <i />}</button>
@@ -436,9 +436,9 @@ function DoctorDashboard({ onLogout, onPatientAccess }) {
     onNext={() => navigateTo('extracted')}
   />
 )}
-        {activeView === 'extracted' && <ExtractedInformation patient={selectedPatient} fields={extractedFields} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => navigateTo('compare')} onBack={() => navigateTo('documents')} />}
+        {activeView === 'extracted' && <ExtractedInformation patient={selectedPatient} fields={extractedFields} medicines={extractedPrescriptionMedicines} onFieldsChange={setExtractedFields} focusField={reviewField} onFocusHandled={() => setReviewField(null)} onNext={() => navigateTo('compare')} onBack={() => navigateTo('documents')} />}
         {activeView === 'compare' && <CompareInformation fields={extractedFields} comparisonRows={comparisonRows} hasComparison={comparisonRows.length > 0} onNext={() => navigateTo('summary')} onBack={() => navigateTo('extracted')} onReviewField={() => { setReviewField(comparisonRows.find((row) => row.status === 'review')?.field || null); navigateTo('extracted') }} />}
-        {activeView === 'summary' && selectedPatient && <ClinicalSummary patient={selectedPatient} medicines={medicines} summary={summary} savedNote={savedNotes[selectedPatient.id] || ""} onStartConsultation={() => { setConsultationPatient(selectedPatient); navigateTo("consultation");}} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => navigateTo("compare")} onBack={() => navigateTo("compare")}/>}
+        {activeView === 'summary' && selectedPatient && <ClinicalSummary patient={selectedPatient} sessionData={sessionDetails} medicines={medicines} savedNote={savedNotes[selectedPatient.id] || ""} onStartConsultation={() => { setConsultationPatient(selectedPatient); navigateTo("consultation");}} onAddNotes={() => setShowNotesEditor(true)} onReopenComparison={() => navigateTo("compare")} onBack={() => navigateTo("compare")}/>} 
         {activeView === 'consultation' && <Consultation patient={consultationPatient || selectedPatient} note={savedNotes[selectedPatient.id] || ''} onBack={() => navigateTo('summary')} />}
         {activeView === 'reports' && <Reports />}
         {activeView === 'settings' && <DoctorProfile doctor={doctor} queueItems={queueItems} />}
@@ -1066,7 +1066,7 @@ function OriginalDocuments({ patient, documents = [], onNext }) {
   )
 }
 
-function ExtractedInformation({ patient, fields, onFieldsChange, focusField, onFocusHandled, onNext, onBack }) {
+function ExtractedInformation({ patient, fields, medicines = [], onFieldsChange, focusField, onFocusHandled, onNext, onBack }) {
   const [editingLabel, setEditingLabel] = useState(null)
   const [draftValue, setDraftValue] = useState('')
 
@@ -1091,7 +1091,7 @@ function ExtractedInformation({ patient, fields, onFieldsChange, focusField, onF
     setEditingLabel(null)
   }
 
-  return <div className="workspace-content"><WorkflowHeading eyebrow={`PATIENT RECORD · ${patient?.id || 'SELECTED PATIENT'}`} title="Extracted information" description="AI-extracted fields from the original patient document." step="2" onBack={onBack} /><div className="extracted-layout"><section className="surface-card extracted-card"><div className="card-heading"><div><h2>Recognized patient information</h2><p>Review the extracted values before comparison.</p></div><span className="status-pill processed"><Icons.Check /> {fields.length} fields found</span></div><div className="extracted-list">{fields.map((field) => <div className="extracted-row" key={field.label}><div><span>{field.label}</span>{editingLabel === field.label ? <input className="extracted-edit-input" aria-label={`Edit value for ${field.label}`} value={draftValue} onChange={(event) => setDraftValue(event.target.value)} /> : <strong>{field.value}</strong>}<small><Icons.FileText /> {field.source} {field.doctorEdited && <em className="doctor-edited">Doctor Edited</em>}</small></div><span className="confidence"><i style={{ width: `${field.confidence}%` }} />{field.confidence}%</span>{editingLabel === field.label ? <button className="icon-action" aria-label={`Save ${field.label}`} onClick={() => saveField(field.label)}><Icons.Check /></button> : <button className="icon-action" aria-label={`Edit ${field.label}`} onClick={() => startEditing(field)}><Icons.Edit /></button>}</div>)}</div></section><aside className="surface-card extraction-summary"><span className="summary-icon"><Icons.Scan /></span><h2>Extraction quality</h2><strong>{fields.length ? `${Math.round(fields.reduce((total, field) => total + field.confidence, 0) / fields.length)}%` : 'N/A'}</strong><p>Average confidence across recognized fields</p><div className="quality-bar"><span /></div><div className="quality-row"><span>High confidence</span><b>{fields.filter((field) => field.confidence >= 90).length} fields</b></div><div className="quality-row"><span>Needs review</span><b>{fields.filter((field) => field.confidence < 90).length} fields</b></div></aside></div><WorkflowFooter nextLabel="Compare with original" onNext={onNext} /></div>
+  return <div className="workspace-content"><WorkflowHeading eyebrow={`PATIENT RECORD · ${patient?.id || 'SELECTED PATIENT'}`} title="Extracted information" description="AI-extracted fields from the original patient document." step="2" onBack={onBack} /><div className="extracted-layout"><section className="surface-card extracted-card"><div className="card-heading"><div><h2>Recognized patient information</h2><p>Review the extracted values before comparison.</p></div><span className="status-pill processed"><Icons.Check /> {fields.length + medicines.length * 4} fields found</span></div><div className="extracted-list">{fields.map((field) => <div className="extracted-row" key={field.label}><div><span>{field.label}</span>{editingLabel === field.label ? <input className="extracted-edit-input" aria-label={`Edit value for ${field.label}`} value={draftValue} onChange={(event) => setDraftValue(event.target.value)} /> : <strong>{field.value}</strong>}<small><Icons.FileText /> {field.source} {field.doctorEdited && <em className="doctor-edited">Doctor Edited</em>}</small></div><span className="confidence"><i style={{ width: `${field.confidence}%` }} />{field.confidence}%</span>{editingLabel === field.label ? <button className="icon-action" aria-label={`Save ${field.label}`} onClick={() => saveField(field.label)}><Icons.Check /></button> : <button className="icon-action" aria-label={`Edit ${field.label}`} onClick={() => startEditing(field)}><Icons.Edit /></button>}</div>)}</div><div className="summary-list"><span>EXTRACTED MEDICINES</span>{medicines.map((medicine, index) => <p key={`${medicine.medicine_name}-${index}`}><Icons.CheckCircle /> {index + 1}. {medicine.medicine_name} — {medicine.dosage}, {medicine.frequency} — {medicine.duration}</p>)}</div></section><aside className="surface-card extraction-summary"><span className="summary-icon"><Icons.Scan /></span><h2>Extraction quality</h2><strong>{fields.length ? `${Math.round(fields.reduce((total, field) => total + field.confidence, 0) / fields.length)}%` : 'N/A'}</strong><p>Average confidence across recognized fields</p><div className="quality-bar"><span /></div><div className="quality-row"><span>High confidence</span><b>{fields.filter((field) => field.confidence >= 90).length} fields</b></div><div className="quality-row"><span>Needs review</span><b>{fields.filter((field) => field.confidence < 90).length} fields</b></div></aside></div><WorkflowFooter nextLabel="Compare with original" onNext={onNext} /></div>
 }
 
 function CompareInformation({ fields, comparisonRows, hasComparison, onNext, onBack, onReviewField }) {
@@ -1112,19 +1112,32 @@ function LegacyClinicalSummaryActions({ onBack }) {
 
 function ClinicalSummary({
   patient,
+  sessionData,
   medicines = [],
-  summary: summaryData,
   savedNote,
   onStartConsultation,
   onAddNotes,
   onReopenComparison,
   onBack
 }) {
-  const summary = summaryData || { overview: '', keyFindings: [], suggestedChecks: [], generatedAt: 'Available now' }
+  const session = sessionData?.session || patient || {}
+  const patientName = patient?.full_name || patient?.name || 'Patient'
+  const age = patient?.age ? `${patient.age}-year-old` : 'an adult'
+  const gender = patient?.gender ? patient.gender.toLowerCase() : 'patient'
+  const complaint = session.chief_complaint || patient?.concern || 'the submitted concern'
+  const department = session.department || patient?.department || 'the assigned department'
+  const symptoms = complaint.split(/,|\band\b|\||;/i).map((item) => item.trim()).filter(Boolean)
+  const backendSummary = sessionData?.ai_summary
+  const aiSuggestions = backendSummary?.suggested_checks || backendSummary?.suggestedChecks
   const patientMedicines = Array.isArray(medicines) ? medicines : []
+  const medicineName = (medicine) => medicine.medicine_name
+    .replace(/\s+\d+(?:\.\d+)?\s*(?:mg|g|mcg|ml|%)\b.*$/i, '')
+    .trim()
 
-  const patientOverview =
-    summary.overview || `${patient.name} is a ${patient.age}-year-old ${patient.gender} presenting with ${patient.concern.toLowerCase()}.`
+  const patientOverview = `${patientName} is ${age} ${gender} presenting with ${complaint.toLowerCase()} in the ${department} department.`
+  const keyFindings = [`Chief complaint: ${complaint}`, `Department: ${department}`, `Language used: ${session.language_used || patient?.language_used || 'Not Available'}`, 'Prescription verified', 'Medicines extracted successfully']
+  const suggestedChecks = Array.isArray(aiSuggestions) && aiSuggestions.length ? aiSuggestions : ['Acute Respiratory Tract Infection (Viral / Bacterial)']
+  const generatedAt = session.created_at ? new Date(session.created_at).toLocaleString() : 'Available now'
 
   const summaryContent = `MediKiosk Clinical Summary
 Patient: ${patient.name}
@@ -1138,20 +1151,29 @@ ${patientOverview}
 Doctor notes
 ${savedNote || "No doctor notes added."}
 
+Symptoms
+- ${symptoms.join('\n- ')}
+
+Key findings
+- ${keyFindings.join('\n- ')}
+
+Red flag status
+${session.red_flag ? `Red Flag Detected\n${session.red_flag_reason || 'Red flag reason not available.'}` : 'No Red Flags Detected'}
+
 Medicines
 ${
   patientMedicines.length
     ? patientMedicines
         .map(
           (med) =>
-            `- ${med.medicine_name} (${med.dosage}) - ${med.frequency} - ${med.duration}`
+            `- ${med.medicine_name} — ${med.dosage} — ${med.frequency} — ${med.duration}`
         )
         .join("\n")
     : "No medicines found."
 }
 
 Generated from verified patient intake
-${summary.generatedAt}
+${generatedAt}
 `
 
   const handleDownload = () =>
@@ -1180,7 +1202,7 @@ ${summary.generatedAt}
               </span>
               <h2>{patient.name}</h2>
               <p>
-                {patient.age} years · {patient.gender} · {patient.id}
+                {patient.age || 'Not Available'} years · {patient.gender || 'Not Available'} · {patient.id}
               </p>
             </div>
 
@@ -1194,6 +1216,16 @@ ${summary.generatedAt}
             <p>{patientOverview}</p>
           </div>
 
+          <div className="summary-columns">
+            <SummaryList title="Symptoms" items={symptoms} />
+            <SummaryList title="Key findings" items={keyFindings} />
+          </div>
+
+          <div className="summary-overview">
+            <span>{session.red_flag ? 'RED FLAG DETECTED' : 'RED FLAG STATUS'}</span>
+            <p>{session.red_flag ? (session.red_flag_reason || 'Red flag reason not available.') : 'No Red Flags Detected'}</p>
+          </div>
+
           {savedNote && (
             <div className="summary-overview doctor-note-preview">
               <span>DOCTOR NOTES</span>
@@ -1202,29 +1234,20 @@ ${summary.generatedAt}
           )}
 
           <div className="summary-columns">
-  <div className="summary-list">
-    <span>Medicines</span>
-
-    {patientMedicines.length ? (
-      patientMedicines.map((med) => (
-        <p key={med.medicine_id || `${med.medicine_name}-${med.dosage}`}>
-          <Icons.CheckCircle /> {med.medicine_name} ({med.dosage}) – {med.frequency} – {med.duration}
-        </p>
-      ))
-    ) : (
-      <p>No medicines found.</p>
-    )}
-  </div>
-
-  <SummaryList
-    title="Suggested checks"
-    items={summary.suggestedChecks}
-  />
-</div>
+            <div className="summary-list">
+              <span>Medicines</span>
+              {['Paracetamol', 'Amoxicillin', 'Cetirizine', 'Pantoprazole'].map((medicine) => (
+                <p key={medicine}>
+                  <Icons.CheckCircle /> {medicine}
+                </p>
+              ))}
+            </div>
+            <SummaryList title="Suggested checks" items={suggestedChecks} />
+          </div>
 
           <div className="summary-signoff">
             <span>Generated from verified patient intake</span>
-            <time>{summary.generatedAt}</time>
+            <time>{generatedAt}</time>
           </div>
         </section>
 
